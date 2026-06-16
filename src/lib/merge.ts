@@ -10,7 +10,12 @@ import { SourceNormalized, normalizeSource } from "./sources/normalize";
 const TITLE_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd"];
 const DESCRIPTION_PRIORITY: Source[] = ["rawg", "tmdb", "steam", "trakt", "letterboxd", "igdb"];
 const RELEASE_DATE_PRIORITY: Source[] = ["steam", "igdb", "rawg", "tmdb", "trakt", "letterboxd"];
-const POSTER_PRIORITY: Source[] = ["tmdb", "rawg", "steam", "igdb", "trakt", "letterboxd"];
+// Poster = PORTRAIT box-art (card view). Prefer sources with true portrait art
+// (TMDB poster, IGDB cover, Steam library_capsule) over RAWG's landscape image.
+const POSTER_PRIORITY: Source[] = ["tmdb", "igdb", "steam", "rawg", "trakt", "letterboxd"];
+// Backdrop = LANDSCAPE art (list-row thumbnail). TMDB backdrop for film/TV; for
+// games the Steam header / RAWG background / IGDB artwork.
+const BACKDROP_PRIORITY: Source[] = ["tmdb", "rawg", "steam", "igdb"];
 const TAGLINE_PRIORITY: Source[] = ["tmdb", "trakt", "letterboxd"];
 const RUNTIME_PRIORITY: Source[] = ["tmdb", "trakt", "letterboxd"];
 const STATUS_PRIORITY: Source[] = ["tmdb", "trakt", "igdb"];
@@ -51,6 +56,7 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType): Omit<Enric
   const description = pickLongestField(DESCRIPTION_PRIORITY, norm, "description");
   const releaseDate = pickField(RELEASE_DATE_PRIORITY, norm, "releaseDate");
   const posterUrl = pickField(POSTER_PRIORITY, norm, "poster");
+  const backdropUrl = pickField(BACKDROP_PRIORITY, norm, "backdrop");
   const metacritic = pickField(["rawg"], norm, "metacritic");
   const steamReviewLabel = pickField(["steam"], norm, "steamReviewLabel");
   const letterboxdRating = pickField(["letterboxd"], norm, "letterboxdRating");
@@ -126,6 +132,7 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType): Omit<Enric
     title,
     releaseDate,
     posterUrl,
+    backdropUrl,
     dates: uniqueDates,
     images: images.slice(0, 12),
     tags: tags.slice(0, 12),

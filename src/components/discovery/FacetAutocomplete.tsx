@@ -24,6 +24,7 @@ export default function FacetAutocomplete({
   useEffect(() => {
     if (debounce.current) clearTimeout(debounce.current);
     const term = q.trim();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (term.length < 2) { setMatches([]); return; }
     debounce.current = setTimeout(async () => {
       setLoading(true);

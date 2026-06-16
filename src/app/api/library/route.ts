@@ -1,23 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/session";
+import { withUser } from "@/lib/withUser";
 import { query, get } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
 import { getUserStateMap } from "@/lib/userState";
 import { MediaLink, EnrichedItem, MediaType } from "@/types";
 import { sourcesForType } from "@/lib/sources/registry";
-import { upsertMediaItem, recordLibraryRating } from "@/lib/matcher";
+import { upsertMediaItem, recordLibraryRating, clearLibrary } from "@/lib/matcher";
 import { persistItemFromIds } from "@/lib/persistItem";
 import { parseRatings, averageRating } from "@/lib/ratings";
 
-// Unix seconds → YYYY-MM-DD (local-agnostic, UTC date part)
-function unixToDate(ts: number | null): string | null {
-  if (!ts) return null;
-  return new Date(ts * 1000).toISOString().split("T")[0];
-}
-
-export async function GET(req: NextRequest) {
-  try {
-    const session = await requireSession();
+export const GET = withUser(async (req: NextRequest, session) => {
     const { searchParams } = req.nextUrl;
     const typeFilter = searchParams.get("type") as MediaType | null;
 
@@ -74,15 +66,14 @@ export async function GET(req: NextRequest) {
     const enriched: (EnrichedItem & { reviewedAt: number | null })[] = [];
     for (const { item, links } of itemMap.values()) {
       const merged = mergeLinks(links, item.type);
-      // The Library timeline groups by *when it was watched/played*; fall back
-      // to the real release date when a platform gives no watched date.
-      const watchedDate = unixToDate(item.reviewedAt) ?? merged.releaseDate;
+      // `releaseDate` is the real release date (from the merged links) so the
+      // "release" sort actually sorts by release. When the user watched/played it
+      // is carried separately as `reviewedAt`.
       enriched.push({
         id: item.id,
         type: item.type,
         platformSources: item.platformSources,
         ...merged,
-        releaseDate: watchedDate,
         rating: averageRating(item.ratings) ?? item.rating,
         ratings: item.ratings,
         review: item.review,
@@ -111,21 +102,14 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({ items: enriched });
-  } catch (e: any) {
-    if (e.message === "Unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    console.error(e);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
-  }
-}
+});
 
 // POST /api/library — rate an item and/or mark it as watched/played.
 // Body: { mediaItemId, rating?, status? }                      — for items already in the DB
 //   OR: { type, title?, releaseDate?, posterUrl?, ids, rating?, status? } — for a
 //       discover/search item not yet persisted; it is created on the fly so it
 //       can be rated without first adding it to a wishlist.
-export async function POST(req: NextRequest) {
-  try {
-    const session = await requireSession();
+export const POST = withUser(async (req: NextRequest, session) => {
     const body = await req.json() as {
       mediaItemId?: string;
       rating?: number | null;
@@ -228,9 +212,13 @@ export async function POST(req: NextRequest) {
       ratings: parseRatings(JSON.stringify(metadata)),
       ...(platformErrors.length > 0 && { warnings: platformErrors }),
     });
-  } catch (e: any) {
-    if (e.message === "Unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    console.error(e);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
-  }
-}
+});
+
+// Remove an item from the library (clears status + rating). Used by the card
+// "watched" toggle when turning it off. Body: { mediaItemId }.
+export const DELETE = withUser(async (req: NextRequest, session) => {
+  const { mediaItemId } = await req.json();
+  if (!mediaItemId) return NextResponse.json({ error: "mediaItemId required" }, { status: 400 });
+  clearLibrary(session.userId, mediaItemId);
+  return NextResponse.json({ ok: true });
+});

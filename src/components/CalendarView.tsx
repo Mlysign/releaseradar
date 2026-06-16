@@ -56,7 +56,7 @@ function OverflowDrawer({
       <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-neutral-900 border border-neutral-700 rounded-xl shadow-2xl overflow-hidden min-w-[220px]">
         <div className="px-3 py-2 border-b border-neutral-800 flex items-center justify-between">
           <span className="text-xs font-medium text-neutral-400">{dateLabel}</span>
-          <button onClick={onClose} className="text-neutral-600 hover:text-white text-xs">✕</button>
+          <button onClick={onClose} aria-label="Close" className="text-neutral-600 hover:text-white text-xs"><span aria-hidden>✕</span></button>
         </div>
         <div className="max-h-64 overflow-y-auto">
           {items.map((item) => (
@@ -97,7 +97,7 @@ function HoverableCalendarItem({ item, onSelect }: { item: CalendarItem; onSelec
         <ItemBadges variant="calendar" item={item} />
         <span className="text-xs text-neutral-200 truncate leading-tight">{item.title}</span>
       </button>
-      {hovered && ref.current && <Tooltip item={item} anchor={ref.current} />}
+      {hovered && <Tooltip item={item} anchorRef={ref} />}
     </>
   );
 }
@@ -170,7 +170,7 @@ function CalendarCell({
               <p className="text-xs font-medium text-white leading-tight line-clamp-2 drop-shadow">{single.title}</p>
               <div className="mt-0.5"><ItemBadges variant="calendar" item={single} /></div>
             </div>
-            {singleHovered && singleRef.current && <Tooltip item={single} anchor={singleRef.current} />}
+            {singleHovered && <Tooltip item={single} anchorRef={singleRef} />}
           </>
         ) : dayItems.length > 0 ? (
           <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/session";
+import { withUser } from "@/lib/withUser";
 import { query, get } from "@/lib/db";
 import { mergeLinks, explainMerge, extractYear } from "@/lib/merge";
 import { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
@@ -16,9 +16,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // identity it always returns the SAME shape: live-enriched metadata + wishlist
 // status across providers + library (watched/played + rating). This is the single
 // mechanic that gathers everything the detail panel needs.
-export async function GET(req: NextRequest) {
-  try {
-    const session = await requireSession();
+export const GET = withUser(async (req: NextRequest, session) => {
     const { searchParams } = req.nextUrl;
 
     const id = searchParams.get("id");
@@ -32,7 +30,7 @@ export async function GET(req: NextRequest) {
     // 1. Resolve the canonical media_item — by UUID, else by any provided source id.
     let mediaItemId: string | null = UUID_RE.test(id) ? id : resolveBySourceIds(type, sourceIds);
 
-    let item = mediaItemId ? get<any>("SELECT * FROM media_items WHERE id = ?", [mediaItemId]) : null;
+    const item = mediaItemId ? get<any>("SELECT * FROM media_items WHERE id = ?", [mediaItemId]) : null;
     if (mediaItemId && !item) mediaItemId = null; // stale id → treat as live-only
 
     const resolvedVia: "uuid" | "source-id" | "live" = item ? (UUID_RE.test(id) ? "uuid" : "source-id") : "live";
@@ -128,12 +126,7 @@ export async function GET(req: NextRequest) {
       onAnyList,
       ...(debug ? { debug } : {}),
     });
-  } catch (e: any) {
-    if (e.message === "Unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    console.error("[detail]", e);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
-  }
-}
+});
 
 // ── Identity helpers ──────────────────────────────────────────────────────────
 

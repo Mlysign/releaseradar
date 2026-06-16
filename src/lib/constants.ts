@@ -1,4 +1,5 @@
 import { MediaType, Source } from "@/types";
+import { CATALOG } from "@/lib/sources/catalog";
 
 export const TYPE_COLORS: Record<MediaType | string, string> = {
   game: "#4ade80",
@@ -6,12 +7,15 @@ export const TYPE_COLORS: Record<MediaType | string, string> = {
   show: "#a78bfa",
 };
 
+// Connectable-platform presentation (color/label) is declared once in catalog.ts
+// (A5); the maps below derive from it and add the display-only sources — IGDB
+// (metadata) and the external rating providers in the community-ratings row,
+// which aren't connectable accounts.
+const CATALOG_COLORS = Object.fromEntries(Object.values(CATALOG).map((m) => [m.id, m.color]));
+const CATALOG_LABELS = Object.fromEntries(Object.values(CATALOG).map((m) => [m.id, m.shortLabel ?? m.label]));
+
 export const SOURCE_COLORS: Record<Source | string, string> = {
-  steam: "#1b9af7",
-  rawg: "#4ade80",
-  trakt: "#ed1c24",
-  tmdb: "#01b4e4",
-  letterboxd: "#00c030",
+  ...CATALOG_COLORS,
   igdb: "#9147ff",
   // External rating sources surfaced in the unified community-ratings row.
   imdb: "#f5c518",
@@ -45,11 +49,7 @@ export const ROLE_LABELS: Record<string, string> = {
 };
 
 export const SOURCE_LABELS: Record<Source | string, string> = {
-  steam: "Steam",
-  rawg: "RAWG",
-  trakt: "Trakt",
-  tmdb: "TMDB",
-  letterboxd: "Letterboxd",
+  ...CATALOG_LABELS,
   igdb: "IGDB",
   imdb: "IMDb",
   rt: "Rotten Tomatoes",

@@ -7,7 +7,8 @@ export interface MediaCardItem {
   type: string;
   title: string;
   releaseDate: string | null;
-  posterUrl: string | null;
+  posterUrl: string | null;          // portrait box-art (card view)
+  backdropUrl?: string | null;       // landscape art (list-row thumbnail); falls back to posterUrl
   platformSources?: string[];   // wishlist providers
   onWatchlist?: boolean;
   dates?: { source: string; date: string }[];

@@ -157,12 +157,27 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
 const _cache = new Map<string, { sig: string; data: LibraryFacetAnalysis }>();
 
 export function librarySignature(userId: string): string {
-  const r = get<{ n: number; mx: number; sm: number }>(
-    `SELECT COUNT(*) n, COALESCE(MAX(reviewed_at),0) mx, COALESCE(SUM(rating),0) sm
+  // D6: COUNT/MAX(reviewed_at)/SUM(rating) alone miss two offsetting edits
+  // (7→8 and 8→7 leave all three unchanged). A rowid-weighted rating sum is
+  // order-sensitive, so swapping two items' ratings changes the signature.
+  const r = get<{ n: number; mx: number; sm: number; wsm: number }>(
+    `SELECT COUNT(*) n, COALESCE(MAX(reviewed_at),0) mx, COALESCE(SUM(rating),0) sm,
+            COALESCE(SUM(rating * rowid),0) wsm
      FROM user_library WHERE user_id = ?`,
     [userId]
   );
-  return `${r?.n ?? 0}:${r?.mx ?? 0}:${r?.sm ?? 0}`;
+  // D9: the facets come from the underlying media_links' raw_data, but an
+  // enrich/backfill rewrites raw_data + bumps last_synced WITHOUT touching
+  // user_library — so a user_library-only signature would serve stale (pre-enrich)
+  // facets. Fold in the linked rows' count + MAX(last_synced) so any re-sync of a
+  // library item's links invalidates the cache.
+  const l = get<{ lc: number; lmx: number }>(
+    `SELECT COUNT(*) lc, COALESCE(MAX(ml.last_synced),0) lmx
+       FROM user_library ul JOIN media_links ml ON ml.media_item_id = ul.media_item_id
+      WHERE ul.user_id = ?`,
+    [userId]
+  );
+  return `${r?.n ?? 0}:${r?.mx ?? 0}:${r?.sm ?? 0}:${r?.wsm ?? 0}:${l?.lc ?? 0}:${l?.lmx ?? 0}`;
 }
 
 export function getLibraryFacetAnalysis(userId: string): LibraryFacetAnalysis {

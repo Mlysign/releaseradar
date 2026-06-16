@@ -18,9 +18,10 @@ function StatCard({ label, value, sub, accent }: { label: string; value: string;
   );
 }
 
-// Two-bar comparison (you vs crowd) on a 0-10 scale.
-function CompareBars({ you, crowd }: { you: number | null; crowd: number | null }) {
-  const Row = ({ label, v, color }: { label: string; v: number | null; color: string }) => (
+// One bar of the you-vs-crowd comparison. Module-scoped so it isn't re-created
+// as a new component type on every CompareBars render (react-hooks/static-components).
+function CompareRow({ label, v, color }: { label: string; v: number | null; color: string }) {
+  return (
     <div className="flex items-center gap-3">
       <span className="w-14 text-xs text-neutral-400">{label}</span>
       <div className="relative flex-1 h-3 rounded-full bg-neutral-800 overflow-hidden">
@@ -29,10 +30,14 @@ function CompareBars({ you, crowd }: { you: number | null; crowd: number | null 
       <span className="w-10 text-right text-xs tabular-nums text-neutral-300">{v != null ? v.toFixed(1) : "—"}</span>
     </div>
   );
+}
+
+// Two-bar comparison (you vs crowd) on a 0-10 scale.
+function CompareBars({ you, crowd }: { you: number | null; crowd: number | null }) {
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-900 p-4 space-y-2">
-      <Row label="You" v={you} color="#4ade80" />
-      <Row label="Crowd" v={crowd} color="#60a5fa" />
+      <CompareRow label="You" v={you} color="#4ade80" />
+      <CompareRow label="Crowd" v={crowd} color="#60a5fa" />
     </div>
   );
 }
@@ -64,6 +69,7 @@ function FacetDetail() {
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!kind || !key) { setStatus("error"); return; }
     setStatus("loading");
     const qs = new URLSearchParams({ kind, key, label });
@@ -77,7 +83,7 @@ function FacetDetail() {
   const roleLabel = kind === "tag" ? "Tag" : role ? (ROLE_LABELS[role] ?? role) : kind ?? "";
 
   if (status === "error") {
-    return <div className="text-center py-20 text-neutral-500"><p className="mb-3">Couldn't load this.</p><Link href="/insights" className="text-xs underline">Back to Insights</Link></div>;
+    return <div className="text-center py-20 text-neutral-500"><p className="mb-3">Couldn&apos;t load this.</p><Link href="/insights" className="text-xs underline">Back to Insights</Link></div>;
   }
   if (status === "loading" || !data) {
     return <div className="text-center py-20 text-neutral-500 animate-pulse">Loading {label}…</div>;

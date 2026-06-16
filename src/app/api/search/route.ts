@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/session";
+import { withUser } from "@/lib/withUser";
 import { searchRawg } from "@/lib/sources/rawg";
 import { get } from "@/lib/db";
 import { normalizeName } from "@/lib/merge";
@@ -21,9 +21,7 @@ interface SearchResult {
   foundOn: string[];
 }
 
-export async function GET(req: NextRequest) {
-  try {
-    const session = await requireSession();
+export const GET = withUser(async (req: NextRequest, session) => {
     const q = req.nextUrl.searchParams.get("q")?.trim();
     const type = req.nextUrl.searchParams.get("type");
 
@@ -174,8 +172,4 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({ results });
-  } catch (e: any) {
-    if (e.message === "Unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    return NextResponse.json({ error: e.message }, { status: 500 });
-  }
-}
+});

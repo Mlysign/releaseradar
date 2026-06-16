@@ -26,10 +26,12 @@ function SourceDots({ sources }: { sources: string[] }) {
 
 interface TooltipProps {
   item: TooltipItem;
-  anchor: HTMLElement;
+  // The anchor is passed as a ref so callers don't read `.current` during their
+  // own render (react-hooks/refs); we read it here in an effect, which is allowed.
+  anchorRef: React.RefObject<HTMLElement | null>;
 }
 
-export default function Tooltip({ item, anchor }: TooltipProps) {
+export default function Tooltip({ item, anchorRef }: TooltipProps) {
   // Compute position once at mount from the anchor's viewport rect.
   // Using createPortal means we render into document.body — no scroll
   // containers in the way — so plain viewport coords are correct.
@@ -37,12 +39,17 @@ export default function Tooltip({ item, anchor }: TooltipProps) {
   const w = 260;
 
   useEffect(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) return;
     const rect = anchor.getBoundingClientRect();
     let left = rect.right + 12;
     if (left + w > window.innerWidth) left = rect.left - w - 12;
     const top = Math.min(rect.top, window.innerHeight - 240);
+    // Position can only be known after the anchor is laid out, so this measure →
+    // setState happens in an effect by necessity.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPos({ top, left });
-  }, [anchor]);
+  }, [anchorRef]);
 
   if (!pos) return null;
 

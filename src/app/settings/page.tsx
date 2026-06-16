@@ -3,15 +3,26 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { SOURCE_COLORS } from "@/lib/constants";
 import NavBar from "@/components/NavBar";
+import Button from "@/components/ui/Button";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 
 function SettingsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const confirm = useConfirm();
   const [user, setUser] = useState<any>(null);
   const [identities, setIdentities] = useState<any[]>([]);
   const [syncLogs, setSyncLogs] = useState<any[]>([]);
   const [itemCount, setItemCount] = useState(0);
-  const [notice, setNotice] = useState<{ msg: string; ok: boolean } | null>(null);
+  // The connect/error notice comes from the OAuth redirect's query params — derive
+  // it once at init rather than setting state in an effect (react-hooks/set-state-in-effect).
+  const [notice, setNotice] = useState<{ msg: string; ok: boolean } | null>(() => {
+    const connected = searchParams.get("connected");
+    const error = searchParams.get("error");
+    if (connected) return { msg: `${connected} connected successfully.`, ok: true };
+    if (error) return { msg: `Connection failed: ${error}`, ok: false };
+    return null;
+  });
   const [syncing, setSyncing] = useState<string | null>(null);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const [showRawgForm, setShowRawgForm] = useState(false);
@@ -20,11 +31,8 @@ function SettingsContent() {
   const [rawgLoading, setRawgLoading] = useState(false);
 
   useEffect(() => {
-    const connected = searchParams.get("connected");
-    const error = searchParams.get("error");
-    if (connected) setNotice({ msg: `${connected} connected successfully.`, ok: true });
-    if (error) setNotice({ msg: `Connection failed: ${error}`, ok: false });
     fetchMe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function fetchMe() {
@@ -58,7 +66,13 @@ function SettingsContent() {
   }
 
   async function disconnect(provider: string) {
-    if (!confirm(`Disconnect ${provider}? Items from this source will be removed from your watchlist.`)) return;
+    const ok = await confirm({
+      title: `Disconnect ${provider}?`,
+      message: "Items from this source will be removed from your watchlist.",
+      confirmLabel: "Disconnect",
+      danger: true,
+    });
+    if (!ok) return;
     setDisconnecting(provider);
     const res = await fetch("/api/auth/disconnect", {
       method: "POST",
@@ -193,14 +207,12 @@ function SettingsContent() {
                         <span className="text-xs bg-green-900/30 text-green-400 px-2.5 py-1 rounded-full border border-green-800">
                           Connected
                         </span>
-                        <button onClick={() => syncProvider(p.key)} disabled={syncing === p.key}
-                          className="text-xs px-3 py-1.5 bg-neutral-800 hover:bg-neutral-700 rounded-lg transition-colors disabled:opacity-40">
+                        <Button onClick={() => syncProvider(p.key)} disabled={syncing === p.key}>
                           {syncing === p.key ? "Syncing..." : "Sync"}
-                        </button>
-                        <button onClick={() => disconnect(p.key)} disabled={disconnecting === p.key}
-                          className="text-xs px-3 py-1.5 text-red-400 hover:bg-red-950/30 border border-red-900/30 rounded-lg transition-colors disabled:opacity-40">
+                        </Button>
+                        <Button variant="danger" onClick={() => disconnect(p.key)} disabled={disconnecting === p.key}>
                           {disconnecting === p.key ? "..." : "Disconnect"}
-                        </button>
+                        </Button>
                       </>
                     ) : (
                       p.connectUrl === "rawg-form" ? (
@@ -227,7 +239,7 @@ function SettingsContent() {
                 )}
                 {!p.canWrite && identity && (
                   <p className="text-xs text-neutral-600 mt-1">
-                    Read-only – {p.label} doesn't support adding to wishlist via API
+                    Read-only – {p.label} doesn&apos;t support adding to wishlist via API
                   </p>
                 )}
               </div>

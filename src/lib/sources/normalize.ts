@@ -12,7 +12,8 @@ export interface SourceNormalized {
   title?: string | null;
   description?: string | null;
   releaseDate?: string | null;
-  poster?: string | null;
+  poster?: string | null;     // portrait box-art (2:3) — for the card view
+  backdrop?: string | null;   // landscape art (≈16:9) — for the list-row thumbnail
   tagline?: string | null;
   developer?: string | null;
   publisher?: string | null;
@@ -41,7 +42,7 @@ export interface SourceNormalized {
   keywords?: string[];
   communityRatings?: CommunityRating[];
   storeLinks?: { name: string; url: string; source: Source }[];
-  cast?: { name: string; character: string | null }[];
+  cast?: { name: string; character: string | null; profileUrl?: string | null }[];
   streamingProviders?: { name: string; logoPath: string | null; providerId: number }[];
   // tmdb-only facts
   budget?: number | null;
@@ -79,6 +80,7 @@ function normalizeTmdb(d: any, type: MediaType): SourceNormalized {
   out.description = d.overview ?? null;
   out.releaseDate = d.release_date ?? d.first_air_date ?? null;
   out.poster = d.poster_path ? `https://image.tmdb.org/t/p/w500${d.poster_path}` : null;
+  out.backdrop = d.backdrop_path ? `https://image.tmdb.org/t/p/w780${d.backdrop_path}` : null;
   out.tagline = d.tagline || null;
   out.runtimeMinutes = type === "movie"
     ? (d.runtime || null)
@@ -147,7 +149,11 @@ function normalizeTmdb(d: any, type: MediaType): SourceNormalized {
   out.director = type === "show"
     ? (d.created_by?.[0]?.name ?? null)
     : ((d.credits?.crew ?? []).find((c: any) => c.job === "Director")?.name ?? null);
-  out.cast = (d.credits?.cast ?? []).slice(0, 8).map((c: any) => ({ name: c.name, character: c.character ?? null }));
+  out.cast = (d.credits?.cast ?? []).slice(0, 8).map((c: any) => ({
+    name: c.name,
+    character: c.character ?? null,
+    profileUrl: c.profile_path ? `https://image.tmdb.org/t/p/w185${c.profile_path}` : null,
+  }));
   out.keywords = (d.keywords?.keywords ?? d.keywords?.results ?? []).map((k: any) => k.name).filter(Boolean);
 
   out.imdbId = d.external_ids?.imdb_id ?? d.imdb_id ?? null;
@@ -247,7 +253,14 @@ function normalizeSteam(d: any): SourceNormalized {
     }
     return null;
   })();
-  out.poster = appId ? `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg` : null;
+  // Portrait box-art (library_capsule, ≈600×900) when the enriched assets are
+  // present; else fall back to the landscape header (un-enriched owned-games).
+  const steamCapsule = d.assets?.asset_url_format && d.assets?.library_capsule
+    ? `https://shared.fastly.steamstatic.com/store_item_assets/${d.assets.asset_url_format.replace("${FILENAME}", d.assets.library_capsule)}`
+    : null;
+  const steamHeader = appId ? `https://cdn.akamai.steamstatic.com/steam/apps/${appId}/header.jpg` : null;
+  out.poster = steamCapsule ?? steamHeader;
+  out.backdrop = steamHeader;
   out.steamReviewLabel = d.reviews?.summary_filtered?.review_score_label ?? null;
   out.developer = d.basic_info?.developers?.[0]?.name ?? null;
   out.publisher = d.basic_info?.publishers?.[0]?.name ?? null;
@@ -294,7 +307,10 @@ function normalizeRawg(d: any): SourceNormalized {
   out.title = d.name ?? null;
   out.description = d.description_raw ?? d.description ?? null;
   out.releaseDate = d.released ?? null;
+  // RAWG only carries landscape art — same image serves as poster fallback and
+  // backdrop (POSTER_PRIORITY prefers Steam/IGDB portrait art when present).
   out.poster = d.background_image ?? null;
+  out.backdrop = d.background_image ?? null;
   out.metacritic = typeof d.metacritic === "number" ? d.metacritic : null;
   out.developer = d.developers?.[0]?.name ?? null;
   out.publisher = d.publishers?.[0]?.name ?? null;
@@ -335,6 +351,8 @@ function normalizeIgdb(d: any): SourceNormalized {
   out.releaseDate = typeof d.first_release_date === "number"
     ? new Date(d.first_release_date * 1000).toISOString().split("T")[0] : null;
   out.poster = igdbImg(d.cover?.image_id, "t_cover_big");
+  // Landscape art for the list thumbnail: first artwork, else first screenshot.
+  out.backdrop = igdbImg(d.artworks?.[0]?.image_id ?? d.screenshots?.[0]?.image_id, "t_1080p");
   out.developer = (d.involved_companies ?? []).find((c: any) => c.developer)?.company?.name ?? null;
   out.publisher = (d.involved_companies ?? []).find((c: any) => c.publisher)?.company?.name ?? null;
   out.collection = d.franchises?.[0]?.name ?? null;

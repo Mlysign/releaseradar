@@ -2,6 +2,7 @@
 // point: watchlist/library items carry a UUID + a `sources` array, while
 // discover items carry a composite id + an `ids` object. Both serialize into
 // the same query shape that `/api/detail` already knows how to resolve.
+import { CATALOG } from "@/lib/sources/catalog";
 
 export interface InspectableItem {
   id: string;
@@ -15,13 +16,14 @@ export interface InspectableItem {
   ids?: { rawg?: number | string; tmdb?: number | string; trakt?: number | string; steam?: number | string; letterboxd?: number | string };
 }
 
-const SOURCE_PARAM: Record<string, string> = {
-  rawg: "rawgId",
-  tmdb: "tmdbId",
-  trakt: "traktId",
-  steam: "steamId",
-  letterboxd: "letterboxdId",
-};
+// source → `/item` query-param name, declared once on the catalog entries (A5).
+const SOURCE_PARAM: Record<string, string> = Object.fromEntries(
+  Object.values(CATALOG).map((m) => [m.id, m.urlParam]),
+);
+
+// The param names themselves, for the read side (`/item` forwarding the ids it
+// received). Replaces the hardcoded `["rawgId", "tmdbId", …]` lists.
+export const SOURCE_PARAMS: string[] = Object.values(CATALOG).map((m) => m.urlParam);
 
 export function buildItemHref(item: InspectableItem): string {
   const p = new URLSearchParams();

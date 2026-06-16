@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/session";
+import { withUser } from "@/lib/withUser";
 import { get, run, query } from "@/lib/db";
 import { upsertMediaItem, upsertWatchlistEntry, removeWatchlistSource } from "@/lib/matcher";
 import { persistItemFromIds } from "@/lib/persistItem";
 import { SOURCES, sourcesForType } from "@/lib/sources/registry";
 import { MediaType, Source } from "@/types";
 
-export async function POST(req: NextRequest) {
-  try {
-    const session = await requireSession();
+export const POST = withUser(async (req: NextRequest, session) => {
     const body = await req.json();
     const { type, title, releaseDate, posterUrl, ids, targetProvider } = body;
 
@@ -57,16 +55,9 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true, mediaItemId });
-  } catch (e: any) {
-    if (e.message === "Unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    console.error(e);
-    return NextResponse.json({ error: e.message }, { status: 500 });
-  }
-}
+});
 
-export async function DELETE(req: NextRequest) {
-  try {
-    const session = await requireSession();
+export const DELETE = withUser(async (req: NextRequest, session) => {
     const { mediaItemId, source } = await req.json();
 
     const mediaItem = get<{ type: string }>("SELECT type FROM media_items WHERE id = ?", [mediaItemId]);
@@ -99,8 +90,4 @@ export async function DELETE(req: NextRequest) {
     }
 
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    if (e.message === "Unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    return NextResponse.json({ error: e.message }, { status: 500 });
-  }
-}
+});

@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/session";
+import { withUser } from "@/lib/withUser";
 import { query } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
 import { getUserStateMap } from "@/lib/userState";
 import { MediaLink, EnrichedItem, MediaType, Source } from "@/types";
 
-export async function GET(req: NextRequest) {
-  try {
-    const session = await requireSession();
+export const GET = withUser(async (req: NextRequest, session) => {
     const { searchParams } = req.nextUrl;
     const typeFilter = searchParams.get("type") as MediaType | null;
     const sourceFilter = searchParams.get("source") as Source | null;
@@ -93,9 +91,4 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({ items: enriched });
-  } catch (e: any) {
-    if (e.message === "Unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    console.error(e);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
-  }
-}
+});

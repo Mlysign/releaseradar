@@ -6,8 +6,7 @@ import { EnrichedItem, MediaType, Source } from "@/types";
 import { SOURCE_COLORS, SOURCE_LABELS } from "@/lib/constants";
 import NavBar from "@/components/NavBar";
 import { TypeBadge, SourcePill } from "@/components/Badges";
-
-const SOURCE_PARAM_KEYS = ["rawgId", "tmdbId", "traktId", "steamId", "letterboxdId"] as const;
+import { SOURCE_PARAMS } from "@/lib/itemUrl";
 
 interface DebugLink {
   source: Source;
@@ -118,13 +117,14 @@ function DebugInspector() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!id) { setError("No id in URL"); setLoading(false); return; }
     const p = new URLSearchParams();
     p.set("id", id);
     p.set("type", type);
     p.set("debug", "1");
     if (title) p.set("title", title);
-    for (const k of SOURCE_PARAM_KEYS) {
+    for (const k of SOURCE_PARAMS) {
       const v = sp.get(k);
       if (v) p.set(k, v);
     }

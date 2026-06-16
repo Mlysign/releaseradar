@@ -74,4 +74,19 @@ describe("upsertMediaItem / findMatchingItem", () => {
     const gm = upsertMediaItem({ source: "rawg", sourceId: "9", type: "game", title: "Control", releaseDate: "2019-08-27", rawData: { id: 9, name: "Control", released: "2019-08-27" } });
     expect(mv).not.toBe(gm);
   });
+
+  // D9: a later list-payload sync must NOT clobber detail-only fields (dev/pub)
+  // that a prior detail fetch persisted — otherwise game studio data is lost every
+  // sync. mergeRawData shallow-merges new over old, keeping keys the new omits.
+  it("preserves detail-only fields when a sparser payload re-syncs (merge-preserve)", () => {
+    const detail = { id: 50, name: "Hades", released: "2020-09-17", developers: [{ name: "Supergiant Games" }], publishers: [{ name: "Supergiant Games" }] };
+    const id = upsertMediaItem({ source: "rawg", sourceId: "50", type: "game", title: "Hades", releaseDate: "2020-09-17", rawData: detail });
+    // Re-sync with the list payload (no developers/publishers, adds playtime).
+    upsertMediaItem({ source: "rawg", sourceId: "50", type: "game", title: "Hades", releaseDate: "2020-09-17", rawData: { id: 50, name: "Hades", released: "2020-09-17", playtime: 20 } });
+
+    const raw = JSON.parse(query<{ raw_data: string }>("SELECT raw_data FROM media_links WHERE media_item_id=? AND source='rawg'", [id])[0].raw_data);
+    expect(raw.developers?.[0]?.name).toBe("Supergiant Games"); // preserved
+    expect(raw.publishers?.[0]?.name).toBe("Supergiant Games"); // preserved
+    expect(raw.playtime).toBe(20);                              // fresh field applied
+  });
 });

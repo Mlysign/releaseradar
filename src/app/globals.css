@@ -12,3 +12,18 @@
 
 * { box-sizing: border-box; }
 body { font-family: inherit; }
+
+/* Visible keyboard-focus ring on every interactive control (T25 a11y). Only
+   shows for keyboard/AT focus, never on mouse click, so it doesn't affect the
+   pointer experience. */
+:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+/* Don't double up where a control already styles its own focus border. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline-offset: 0;
+}

@@ -14,7 +14,7 @@ export function facetHref(kind: FacetKind, role: string | undefined, label: stri
 }
 
 export default function FacetLink({
-  kind, role, label, className,
-}: { kind: FacetKind; role?: string; label: string; className?: string }) {
-  return <Link href={facetHref(kind, role, label)} className={className}>{label}</Link>;
+  kind, role, label, className, style,
+}: { kind: FacetKind; role?: string; label: string; className?: string; style?: React.CSSProperties }) {
+  return <Link href={facetHref(kind, role, label)} className={className} style={style}>{label}</Link>;
 }

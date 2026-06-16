@@ -13,19 +13,32 @@ interface SourceItem {
   rawData: any;
 }
 
+// Preserve detail-only fields when a sparser payload re-syncs over a richer one
+// (D9). List endpoints (Steam owned-games = appid/name/playtime, RAWG played-list)
+// omit `developers`/`publishers`/`screenshots` that a prior detail fetch persisted,
+// so a plain overwrite would drop them every sync. Shallow-merge new over old:
+// fresh fields win, but keys absent from the new payload are kept.
+function mergeRawData(prevJson: string | null | undefined, next: any): any {
+  if (!prevJson) return next;
+  let prev: any;
+  try { prev = JSON.parse(prevJson); } catch { return next; }
+  const plain = (v: any) => v && typeof v === "object" && !Array.isArray(v);
+  return plain(prev) && plain(next) ? { ...prev, ...next } : next;
+}
+
 // Find or create a media_item for the given source item.
 // Returns the media_item_id.
 export function upsertMediaItem(item: SourceItem): string {
   return transaction(() => {
     // 1. If this exact source link already exists, update its raw data
-    const existing = get<{ media_item_id: string }>(
-      "SELECT media_item_id FROM media_links WHERE source = ? AND source_id = ?",
+    const existing = get<{ media_item_id: string; raw_data: string }>(
+      "SELECT media_item_id, raw_data FROM media_links WHERE source = ? AND source_id = ?",
       [item.source, item.sourceId]
     );
     if (existing) {
       run(
         "UPDATE media_links SET raw_data = ?, title = ?, release_date = ?, last_synced = strftime('%s','now') WHERE source = ? AND source_id = ?",
-        [JSON.stringify(item.rawData), item.title, item.releaseDate, item.source, item.sourceId]
+        [JSON.stringify(mergeRawData(existing.raw_data, item.rawData)), item.title, item.releaseDate, item.source, item.sourceId]
       );
       remergeItem(existing.media_item_id);
       return existing.media_item_id;
@@ -142,14 +155,14 @@ function findMatchingItem(item: SourceItem): string | null {
 // landing on a different item that merely shares the title.
 export function linkSourceToItem(mediaItemId: string, item: SourceItem): string {
   return transaction(() => {
-    const existing = get<{ media_item_id: string }>(
-      "SELECT media_item_id FROM media_links WHERE source = ? AND source_id = ?",
+    const existing = get<{ media_item_id: string; raw_data: string }>(
+      "SELECT media_item_id, raw_data FROM media_links WHERE source = ? AND source_id = ?",
       [item.source, item.sourceId]
     );
     if (existing) {
       run(
         "UPDATE media_links SET raw_data = ?, title = ?, release_date = ?, last_synced = strftime('%s','now') WHERE source = ? AND source_id = ?",
-        [JSON.stringify(item.rawData), item.title, item.releaseDate, item.source, item.sourceId]
+        [JSON.stringify(mergeRawData(existing.raw_data, item.rawData)), item.title, item.releaseDate, item.source, item.sourceId]
       );
       remergeItem(existing.media_item_id);
       return existing.media_item_id;
@@ -338,6 +351,13 @@ export function ignoreItem(userId: string, mediaItemId: string) {
 
 export function unignoreItem(userId: string, mediaItemId: string) {
   run("DELETE FROM user_item_state WHERE user_id = ? AND media_item_id = ? AND relation = 'ignored'", [userId, mediaItemId]);
+}
+
+// Remove an item from the library entirely (clears every per-source library row →
+// drops status + rating). Used by the card "watched" toggle when turning it off.
+export function clearLibrary(userId: string, mediaItemId: string) {
+  run("DELETE FROM user_item_state WHERE user_id = ? AND media_item_id = ? AND relation = 'library'", [userId, mediaItemId]);
+  rebuildCaches(userId, mediaItemId);
 }
 
 // Record a rating / status from the library route's write-back flow. `sources`

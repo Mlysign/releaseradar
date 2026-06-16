@@ -25,6 +25,9 @@ export function useViewMode(
     try {
       const stored = localStorage.getItem(STORAGE_KEY) as ViewMode | null;
       if (stored && VALID.includes(stored) && allowed.includes(stored)) {
+        // localStorage is unavailable during SSR, so correcting to the stored
+        // value necessarily happens here (see the hydration note above).
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setViewState(stored);
       }
     } catch { /* storage unavailable */ }

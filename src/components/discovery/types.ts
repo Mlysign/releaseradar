@@ -8,6 +8,7 @@ export interface DiscoverItem {
   title: string;
   releaseDate: string | null;
   posterUrl: string | null;
+  backdropUrl: string | null;
   communityScore: number | null;
   communityAvg: number | null;
   platformSources: string[];

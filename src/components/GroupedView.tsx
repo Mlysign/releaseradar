@@ -45,7 +45,9 @@ function findTodayOrNextDate(sortedDates: string[]): string | null {
   for (const d of sortedDates) {
     if (!isPast(parseISO(d)) || isToday(parseISO(d))) return d;
   }
-  return null;
+  // All dates are in the past (e.g. a filtered catalog of older releases) — anchor
+  // on the most recent one, the closest thing to "now", instead of not scrolling.
+  return sortedDates.length ? sortedDates[sortedDates.length - 1] : null;
 }
 
 // ── MonthDivider ──────────────────────────────────────────────────

@@ -43,7 +43,7 @@ export default function InsightsPage() {
         {status === "loading" && <div className="text-center py-20 text-neutral-500">Analyzing your library…</div>}
         {status === "error" && (
           <div className="text-center py-20 text-neutral-500">
-            <p className="mb-3">Couldn't load your insights.</p>
+            <p className="mb-3">Couldn&apos;t load your insights.</p>
             <button onClick={init} className="text-xs underline text-neutral-400">Try again</button>
           </div>
         )}

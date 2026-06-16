@@ -10,10 +10,14 @@ import { FacetPill, VocabMatch, SortKey, SORTS, DATE_SORTS, UiFilters, Membershi
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
+import { usePersistedState, useScrollRestore } from "@/lib/usePersistedState";
 import { buildItemHref } from "@/lib/itemUrl";
 import CalendarView from "@/components/CalendarView";
 import GroupedView from "@/components/GroupedView";
 import ErrorBoundary, { ListSkeleton, CardSkeleton } from "@/components/ErrorBoundary";
+import EmptyState from "@/components/ui/EmptyState";
+import Button, { buttonClasses } from "@/components/ui/Button";
+import Spinner from "@/components/ui/Spinner";
 
 type Filter = { types: MediaType[] };
 
@@ -23,14 +27,15 @@ export default function LibraryPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [view, setView] = useViewMode("list", ["list", "card", "calendar"]);
-  const [filter, setFilter] = useState<Filter>({ types: [] });
-  const [search, setSearch] = useState("");
-  const [hideRated, setHideRated] = useState(false);
-  const [includeFacets, setIncludeFacets] = useState<FacetPill[]>([]);
-  const [excludeFacets, setExcludeFacets] = useState<FacetPill[]>([]);
-  const [sort, setSort] = useState<SortKey>("releaseOld");
-  const [yearRange, setYearRange] = useState<[number, number]>(defaultUiFilters().yearRange);
-  const [membership, setMembership] = useState<{ library?: Membership; wishlist?: Membership }>({});
+  // Persisted across back-nav (T12).
+  const [filter, setFilter] = usePersistedState<Filter>("rr_library_filter", { types: [] });
+  const [search, setSearch] = usePersistedState("rr_library_search", "");
+  const [hideRated, setHideRated] = usePersistedState("rr_library_hideRated", false);
+  const [includeFacets, setIncludeFacets] = usePersistedState<FacetPill[]>("rr_library_incFacets", []);
+  const [excludeFacets, setExcludeFacets] = usePersistedState<FacetPill[]>("rr_library_excFacets", []);
+  const [sort, setSort] = usePersistedState<SortKey>("rr_library_sort", "releaseOld");
+  const [yearRange, setYearRange] = usePersistedState<[number, number]>("rr_library_year", defaultUiFilters().yearRange);
+  const [membership, setMembership] = usePersistedState<{ library?: Membership; wishlist?: Membership }>("rr_library_membership", {});
 
   useEffect(() => { init(); }, []);
 
@@ -105,6 +110,7 @@ export default function LibraryPage() {
     : undefined;
   const availableViews: ViewMode[] = isDateSort ? ["list", "card", "calendar"] : ["list", "card"];
   const effView: ViewMode = !isDateSort && view === "calendar" ? "card" : view;
+  useScrollRestore("rr_library_scroll", !loading && sorted.length > 0);
 
   return (
     <div className="min-h-screen">
@@ -137,34 +143,29 @@ export default function LibraryPage() {
       <main className="max-w-6xl mx-auto px-6 py-6">
         {loading && effView === "list"     && <ListSkeleton />}
         {loading && effView === "card"     && <CardSkeleton />}
-        {loading && effView === "calendar" && <div className="text-center py-20 text-neutral-500">Loading…</div>}
+        {loading && effView === "calendar" && <Spinner label="Loading…" />}
 
         {!loading && items.length === 0 && (
-          <div className="max-w-md mx-auto mt-20 text-center">
-            <p className="text-2xl font-bold mb-2">Your library is empty</p>
-            <p className="text-neutral-400 text-sm mb-6">
-              Connect Trakt, Letterboxd, Steam, or RAWG and sync to bring in everything you've watched, played, or own — with your personal scores.
-            </p>
-            <div className="flex gap-3 justify-center">
-              <Link href="/settings" className="text-sm px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 transition-colors">Go to Profile →</Link>
-              <button onClick={sync} disabled={syncing} className="text-sm px-4 py-2 rounded-lg border border-neutral-700 hover:bg-neutral-800 transition-colors disabled:opacity-40">
-                {syncing ? "Syncing…" : "Sync now"}
-              </button>
-            </div>
-          </div>
+          <EmptyState
+            className="mt-20"
+            title="Your library is empty"
+            hint="Connect Trakt, Letterboxd, Steam, or RAWG and sync to bring in everything you've watched, played, or own — with your personal scores."
+            actions={
+              <>
+                <Link href="/settings" className={buttonClasses("secondary", "md")}>Go to Profile →</Link>
+                <Button variant="outline" size="md" onClick={sync} disabled={syncing}>
+                  {syncing ? "Syncing…" : "Sync now"}
+                </Button>
+              </>
+            }
+          />
         )}
 
         {!loading && items.length > 0 && sorted.length === 0 && (
-          <div className="text-center py-16 text-neutral-500">
-            {q ? (
-              <>
-                <p className="mb-2">No results for &ldquo;<span className="text-white">{search}</span>&rdquo;</p>
-                <button onClick={() => setSearch("")} className="text-xs text-neutral-400 underline">Clear search</button>
-              </>
-            ) : (
-              <p>No items match the current filters.</p>
-            )}
-          </div>
+          <EmptyState
+            title={q ? <>No results for &ldquo;<span className="text-white">{search}</span>&rdquo;</> : "No items match the current filters"}
+            actions={q ? <Button variant="ghost" onClick={() => setSearch("")}>Clear search</Button> : undefined}
+          />
         )}
 
         {!loading && sorted.length > 0 && effView !== "calendar" && (

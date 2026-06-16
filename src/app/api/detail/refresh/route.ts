@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireSession } from "@/lib/session";
+import { withUser } from "@/lib/withUser";
 import { get, query } from "@/lib/db";
 import { getPlatformStatus } from "@/lib/watchlistStatus";
 import { refreshItemFromProviders, ItemIds } from "@/lib/refreshItem";
@@ -10,9 +10,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Per-item live refresh: re-check this one item against the user's connected
 // providers, update local DB, and return the fresh wishlist + library state.
 // Metadata is unchanged, so this returns only the user-state delta.
-export async function POST(req: NextRequest) {
-  try {
-    const session = await requireSession();
+export const POST = withUser(async (req: NextRequest, session) => {
     const sp = req.nextUrl.searchParams;
 
     const id = sp.get("id");
@@ -66,12 +64,7 @@ export async function POST(req: NextRequest) {
           })()
         : null,
     });
-  } catch (e: any) {
-    if (e.message === "Unauthorized") return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    console.error("[detail/refresh]", e);
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
-  }
-}
+});
 
 function resolveBySourceIds(ids: ItemIds): string | null {
   const candidates: [string, string | null | undefined][] = [

@@ -40,7 +40,7 @@ export default function LoginPage() {
       <div className="max-w-sm w-full space-y-8 text-center">
         <div>
           <h1 className="text-4xl font-bold mb-2">ReleaseRadar</h1>
-          <p className="text-neutral-400">One calendar for every game, movie, and show you're waiting for.</p>
+          <p className="text-neutral-400">One calendar for every game, movie, and show you&apos;re waiting for.</p>
         </div>
 
         <div className="space-y-3">

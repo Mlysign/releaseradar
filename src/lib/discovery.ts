@@ -31,6 +31,7 @@ export interface DiscoveryVector {
   type: MediaType;
   title: string;
   posterUrl: string | null;
+  backdropUrl: string | null;
   releaseDate: string | null;
   year: number | null;
   communityScore: number | null; // 0-100 representative (one source)
@@ -122,6 +123,7 @@ function buildCache() {
       id: row.id, type: row.type,
       title: row.title ?? merged.title,
       posterUrl: row.poster_url ?? merged.posterUrl,
+      backdropUrl: merged.backdropUrl,
       releaseDate: row.release_date ?? merged.releaseDate,
       year: extractYear(row.release_date ?? merged.releaseDate),
       communityScore: representativeCommunity(merged.communityRatings),
@@ -319,6 +321,7 @@ export interface DiscoverResultItem {
   title: string;
   releaseDate: string | null;
   posterUrl: string | null;
+  backdropUrl: string | null;
   communityScore: number | null;
   communityAvg: number | null;
   platformSources: string[];
@@ -384,7 +387,7 @@ export function find(userId: string, req: FindRequest): FindResult {
   const items: DiscoverResultItem[] = page.map(({ v, score, reasons }) => {
     const st = state.get(v.id);
     return {
-      id: v.id, type: v.type, title: v.title, releaseDate: v.releaseDate, posterUrl: v.posterUrl,
+      id: v.id, type: v.type, title: v.title, releaseDate: v.releaseDate, posterUrl: v.posterUrl, backdropUrl: v.backdropUrl,
       communityScore: v.communityScore,
       communityAvg: v.communityAvg,
       platformSources: st?.platformSources ?? [],

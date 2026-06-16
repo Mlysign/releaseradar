@@ -4,9 +4,8 @@ import { format, parseISO } from "date-fns";
 import { TYPE_COLORS } from "@/lib/constants";
 import Tooltip from "@/components/Tooltip";
 import type { TooltipItem } from "@/components/Tooltip";
-import ItemBadges from "@/components/ItemBadges";
-import { useQuickActions } from "@/lib/useQuickActions";
-import { RateBar, WishlistButton } from "@/components/QuickActions";
+import { TypeIcon } from "@/components/Badges";
+import ActionCells from "@/components/ActionCells";
 import { MediaCardItem } from "@/components/cardItem";
 
 // The shared media-item shape (see cardItem.ts). Re-exported as PosterCardItem
@@ -20,40 +19,52 @@ interface PosterCardProps {
 
 export default function PosterCard({ item, onSelect }: PosterCardProps) {
   const [hovered, setHovered] = useState(false);
+  const [imgErr, setImgErr] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const { rating, wishlisted, status, busy, rate, toggleWishlist } = useQuickActions(item);
-
-  const badgeItem = {
-    type: item.type,
-    platformSources: item.platformSources ?? [],
-    onWatchlist: wishlisted,
-    libraryStatus: status,
-    rating,
-  };
+  // Games carry LANDSCAPE header art (Steam/RAWG); letterbox it over a blurred
+  // fill so the title isn't sliced by the 2:3 portrait frame (U15).
+  const isGame = item.type === "game";
+  const typeColor = TYPE_COLORS[item.type] ?? "#888";
 
   return (
     <>
       <div
         ref={ref}
-        className="group cursor-pointer rounded-xl overflow-hidden border border-neutral-800 bg-neutral-900 hover:border-neutral-600 transition-all hover:scale-[1.02] relative"
+        role="button"
+        tabIndex={0}
+        aria-label={`${item.title} — view details`}
+        className="group cursor-pointer rounded-xl border border-neutral-800 bg-neutral-900 hover:border-neutral-600 transition-all hover:scale-[1.02] relative"
         onMouseEnter={() => { timer.current = setTimeout(() => setHovered(true), 350); }}
         onMouseLeave={() => { if (timer.current) clearTimeout(timer.current); setHovered(false); }}
         onClick={() => onSelect(item)}
+        // Keyboard activation, but only when focus is on the card itself — not on
+        // a nested action button (which handles its own Enter/Space).
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(item); }
+        }}
       >
+        {/* Type accent — color-coded top bar carrying the type icon (T11) */}
+        <div className="h-5 rounded-t-xl flex items-center px-2" style={{ background: typeColor }}>
+          <span className="text-black/75"><TypeIcon type={item.type} size={13} /></span>
+        </div>
+
         {/* Poster image — 2:3 portrait ratio */}
-        <div className="relative w-full bg-neutral-800" style={{ paddingBottom: "150%" }}>
-          {item.posterUrl ? (
-            <img
-              src={item.posterUrl}
-              alt={item.title}
-              className="absolute inset-0 w-full h-full object-cover"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-            />
+        <div className="relative w-full bg-neutral-800 overflow-hidden" style={{ paddingBottom: "150%" }}>
+          {item.posterUrl && !imgErr ? (
+            isGame ? (
+              <>
+                <img src={item.posterUrl} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover blur-md scale-110 opacity-40" />
+                <img src={item.posterUrl} alt={item.title} className="absolute inset-0 w-full h-full object-contain" onError={() => setImgErr(true)} />
+              </>
+            ) : (
+              <img src={item.posterUrl} alt={item.title} className="absolute inset-0 w-full h-full object-cover" onError={() => setImgErr(true)} />
+            )
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-neutral-600 text-2xl font-bold">
-              {item.title[0]}
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-neutral-600">
+              <TypeIcon type={item.type} size={28} />
+              <span className="text-2xl font-bold">{item.title[0]}</span>
             </div>
           )}
 
@@ -63,41 +74,26 @@ export default function PosterCard({ item, onSelect }: PosterCardProps) {
               View details
             </span>
           </div>
-
-          {/* Type colour stripe */}
-          <div
-            className="absolute bottom-0 left-0 right-0 h-0.5"
-            style={{ background: TYPE_COLORS[item.type] ?? "#888" }}
-          />
-
-          {/* Canonical user-state badges (rating, watched/played, wishlist) */}
-          <ItemBadges variant="card" item={badgeItem} />
-
-          {/* Quick actions (rate / wishlist) — hover only */}
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="absolute bottom-0 left-0 right-0 px-1.5 pb-1.5 pt-4 bg-gradient-to-t from-black/90 to-transparent opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity z-10"
-          >
-            <div className="flex items-center gap-1.5">
-              <WishlistButton wishlisted={wishlisted} busy={busy} onToggle={toggleWishlist} />
-              <RateBar rating={rating} busy={busy} onRate={rate} />
-            </div>
-          </div>
         </div>
 
-        {/* Card footer */}
-        <div className="p-2.5 space-y-0.5">
+        {/* Action toolbar — rate · watched · wishlist (always visible) */}
+        <div className="px-2 pt-2">
+          <ActionCells item={item} layout="card" />
+        </div>
+
+        {/* Footer — title + date (type now reads from the color-coded top bar) */}
+        <div className="px-2.5 pb-2.5 pt-1.5 space-y-0.5">
           <p className="font-medium text-sm leading-tight line-clamp-2">{item.title}</p>
-          <p className="text-xs text-neutral-500">
+          <div className="text-xs text-neutral-500">
             {item.releaseDate
               ? (() => { try { return format(parseISO(item.releaseDate), "MMM d, yyyy"); } catch { return item.releaseDate; } })()
               : "TBA"}
-          </p>
+          </div>
         </div>
       </div>
 
-      {hovered && ref.current && (
-        <Tooltip item={item as TooltipItem} anchor={ref.current} />
+      {hovered && (
+        <Tooltip item={item as TooltipItem} anchorRef={ref} />
       )}
     </>
   );

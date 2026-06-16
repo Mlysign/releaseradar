@@ -61,7 +61,8 @@ export interface EnrichedItem {
   type: MediaType;
   title: string;
   releaseDate: string | null;
-  posterUrl: string | null;
+  posterUrl: string | null;       // portrait box-art (card view)
+  backdropUrl: string | null;     // landscape art (list-row thumbnail); null → fall back to posterUrl
   platformSources: Source[];
   // Per-source dates
   dates: { source: Source; date: string }[];
@@ -110,7 +111,7 @@ export interface EnrichedItem {
   publisher: string | null;
   // Movie/show credits + keywords (from TMDB)
   director?: string | null;        // movie director, or show creator
-  cast?: { name: string; character: string | null }[];
+  cast?: { name: string; character: string | null; profileUrl?: string | null }[];
   keywords?: string[];
   trailerYoutubeKey: string | null;
   steamTrailerUrl: string | null;

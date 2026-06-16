@@ -8,7 +8,11 @@ import CalendarView from "@/components/CalendarView";
 import GroupedView from "@/components/GroupedView";
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { buildItemHref } from "@/lib/itemUrl";
+import { usePersistedState } from "@/lib/usePersistedState";
 import ErrorBoundary, { CardSkeleton, ListSkeleton } from "@/components/ErrorBoundary";
+import EmptyState from "@/components/ui/EmptyState";
+import Button from "@/components/ui/Button";
+import Spinner from "@/components/ui/Spinner";
 import {
   UiFilters, defaultUiFilters, FacetPill, VocabMatch, SortKey, DiscoverItem,
   SORTS, DATE_SORTS, YEAR_MIN, YEAR_MAX,
@@ -60,13 +64,31 @@ function sortDiscover(items: any[], sort: SortKey): any[] {
   return arr;
 }
 
+type Sentinel = { loading: boolean; has: boolean; busy: string; cta: string; end: string; onClick: () => void };
+
+// One end-of-list loader bar (top or bottom of the browse timeline). Module-scoped
+// so reading its booleans happens on plain props, not flagged as a ref access in
+// the page's render (the sentinel objects close over ref-stored loaders).
+function SentinelBar({ loading, has, busy, cta, end, onClick }: Sentinel) {
+  return loading ? (
+    <span className="text-sm text-neutral-500 animate-pulse">{busy}</span>
+  ) : has ? (
+    <button onClick={onClick} className="text-sm px-6 py-2.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-xl transition-colors">
+      {cta}
+    </button>
+  ) : (
+    <span className="text-sm text-neutral-600">{end}</span>
+  );
+}
+
 export default function DiscoverPage() {
   const router = useRouter();
-  const [q, setQ] = useState("");
-  const [filters, setFilters] = useState<UiFilters>(defaultUiFilters());
+  // Persisted across back-nav (T12).
+  const [q, setQ] = usePersistedState("rr_discover_q", "");
+  const [filters, setFilters] = usePersistedState<UiFilters>("rr_discover_filters", defaultUiFilters());
   // Default = "releaseOld": the ascending Timeline order. Any other sort (or a
   // query/filter) switches into catalog search results.
-  const [sort, setSort] = useState<SortKey>("releaseOld");
+  const [sort, setSort] = usePersistedState<SortKey>("rr_discover_sort", "releaseOld");
   const [view, setView] = useViewMode("card", ["list", "card", "calendar"]);
 
   // ── Browse (Timeline) state ──
@@ -96,15 +118,8 @@ export default function DiscoverPage() {
   // /filter is active. Non-date sorts (rating / best-match) use the find() search.
   const searchActive = q.trim().length >= 2 || hasActiveFilters(filters) || !DATE_SORTS.includes(sort);
 
-  useEffect(() => {
-    fetch("/api/auth/me").then((r) => r.json()).then((d) => {
-      if (!d.user) { router.push("/"); return; }
-    });
-    loadDefault();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // ── Browse loaders ──
+  // Declared before the mount effect that calls it (react-hooks: no use-before-declaration).
   async function loadDefault() {
     setLoading(true);
     setPages({ games: 1, movies: 1, shows: 1 });
@@ -116,6 +131,17 @@ export default function DiscoverPage() {
     setItems(data.items ?? []);
     setLoading(false);
   }
+
+  useEffect(() => {
+    fetch("/api/auth/me").then((r) => r.json()).then((d) => {
+      if (!d.user) { router.push("/"); return; }
+    });
+    // Initial browse load sets loading state synchronously — expected for a
+    // data-fetch-on-mount effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadDefault();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function loadMore() {
     if (loadingMore || !hasMore || searchActive) return;
@@ -380,17 +406,17 @@ export default function DiscoverPage() {
           <ErrorBoundary label="discover search">
             {searchLoading && effView === "card" && <CardSkeleton />}
             {searchLoading && effView === "list" && <ListSkeleton />}
-            {searchLoading && effView === "calendar" && <div className="text-center py-20 text-neutral-500 animate-pulse">Searching…</div>}
+            {searchLoading && effView === "calendar" && <Spinner label="Searching…" />}
 
             {!searchLoading && combined.length === 0 && webLoading && (
-              <div className="text-center py-16 text-neutral-500 animate-pulse">Searching the databases…</div>
+              <Spinner label="Searching the databases…" />
             )}
 
             {!searchLoading && !webLoading && combined.length === 0 && (
-              <div className="text-center py-16 text-neutral-500">
-                <p className="mb-2">No results{q.trim() ? <> for &ldquo;<span className="text-white">{q}</span>&rdquo;</> : " with these filters"}.</p>
-                <button onClick={resetFilters} className="text-xs text-neutral-400 underline">Clear search &amp; filters</button>
-              </div>
+              <EmptyState
+                title={<>No results{q.trim() ? <> for &ldquo;<span className="text-white">{q}</span>&rdquo;</> : " with these filters"}</>}
+                actions={<Button variant="ghost" onClick={resetFilters}>Clear search &amp; filters</Button>}
+              />
             )}
 
             {!searchLoading && combined.length > 0 && (
@@ -403,9 +429,9 @@ export default function DiscoverPage() {
                 {webLoading && <div className="text-center text-xs text-neutral-500 animate-pulse pt-5">Pulling more from the databases…</div>}
                 {effView !== "calendar" && searchItems.length < searchTotal && (
                   <div className="flex justify-center pt-6">
-                    <button onClick={() => runSearch(searchItems.length, true)} disabled={searchLoadingMore} className="text-sm px-6 py-2.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-xl disabled:opacity-60 transition-colors">
+                    <Button variant="secondary" size="md" onClick={() => runSearch(searchItems.length, true)} disabled={searchLoadingMore} className="px-6 py-2.5">
                       {searchLoadingMore ? "Loading…" : `Load more (${(searchTotal - searchItems.length).toLocaleString()} left)`}
-                    </button>
+                    </Button>
                   </div>
                 )}
               </>
@@ -416,36 +442,20 @@ export default function DiscoverPage() {
           <ErrorBoundary label="discover browse">
             {loading && view === "card" && <CardSkeleton />}
             {loading && view === "list" && <ListSkeleton />}
-            {loading && view === "calendar" && <div className="text-center py-20 text-neutral-500 animate-pulse">Loading…</div>}
+            {loading && view === "calendar" && <Spinner label="Loading…" />}
 
             {!loading && browseFiltered.length > 0 && (
               <>
                 {(view === "list" || view === "card") && (
                   <>
                     <div ref={topSentinelRef} className="mb-6 flex justify-center">
-                      {topSentinel.loading ? (
-                        <span className="text-sm text-neutral-500 animate-pulse">{topSentinel.busy}</span>
-                      ) : topSentinel.has ? (
-                        <button onClick={topSentinel.onClick} className="text-sm px-6 py-2.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-xl transition-colors">
-                          {topSentinel.cta}
-                        </button>
-                      ) : (
-                        <span className="text-sm text-neutral-600">{topSentinel.end}</span>
-                      )}
+                      <SentinelBar {...topSentinel} />
                     </div>
 
                     <GroupedView items={browseFiltered} view={view} descending={descending} onSelect={(i) => router.push(buildItemHref(i as any))} />
 
                     <div ref={sentinelRef} className="mt-10 flex justify-center">
-                      {bottomSentinel.loading ? (
-                        <span className="text-sm text-neutral-500 animate-pulse">{bottomSentinel.busy}</span>
-                      ) : bottomSentinel.has ? (
-                        <button onClick={bottomSentinel.onClick} className="text-sm px-6 py-2.5 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-xl transition-colors">
-                          {bottomSentinel.cta}
-                        </button>
-                      ) : (
-                        <span className="text-sm text-neutral-600">{bottomSentinel.end}</span>
-                      )}
+                      <SentinelBar {...bottomSentinel} />
                     </div>
                   </>
                 )}

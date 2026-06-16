@@ -11,18 +11,22 @@ import { FacetPill, VocabMatch, SortKey, SORTS, DATE_SORTS, UiFilters, Membershi
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
+import { usePersistedState, useScrollRestore } from "@/lib/usePersistedState";
 import { buildItemHref } from "@/lib/itemUrl";
 import CalendarView from "@/components/CalendarView";
 import GroupedView from "@/components/GroupedView";
 import ErrorBoundary, { ListSkeleton, CardSkeleton } from "@/components/ErrorBoundary";
+import EmptyState from "@/components/ui/EmptyState";
+import Button from "@/components/ui/Button";
+import Spinner from "@/components/ui/Spinner";
 
 type Filter = { types: MediaType[] };
 
 const SYNC_STALE_MS = 24 * 60 * 60 * 1000;
 
-// ── Empty state ───────────────────────────────────────────────────
+// ── First-run onboarding checklist (distinct from the shared <EmptyState>) ──
 
-function EmptyState({ identities }: { identities: any[] }) {
+function OnboardingState({ identities }: { identities: any[] }) {
   const connectedProviders = new Set(identities.map((i: any) => i.provider));
   const hasAny = connectedProviders.size > 0;
 
@@ -53,7 +57,7 @@ function EmptyState({ identities }: { identities: any[] }) {
     <div className="max-w-md mx-auto mt-16 px-4">
       <div className="text-center mb-10">
         <p className="text-2xl font-bold mb-2">Welcome to ReleaseRadar</p>
-        <p className="text-neutral-400 text-sm">Track every game, movie, and show you're waiting for — in one place.</p>
+        <p className="text-neutral-400 text-sm">Track every game, movie, and show you&apos;re waiting for — in one place.</p>
       </div>
       <div className="space-y-3">
         {steps.map((step, i) => (
@@ -95,13 +99,14 @@ export default function DashboardPage() {
   const [syncing, setSyncing] = useState(false);
   const [autoSyncing, setAutoSyncing] = useState(false);
   const [view, setView] = useViewMode("list", ["list", "card", "calendar"]);
-  const [filter, setFilter] = useState<Filter>({ types: [] });
-  const [search, setSearch] = useState("");
-  const [includeFacets, setIncludeFacets] = useState<FacetPill[]>([]);
-  const [excludeFacets, setExcludeFacets] = useState<FacetPill[]>([]);
-  const [sort, setSort] = useState<SortKey>("releaseOld");
-  const [yearRange, setYearRange] = useState<[number, number]>(defaultUiFilters().yearRange);
-  const [membership, setMembership] = useState<{ library?: Membership; wishlist?: Membership }>({});
+  // Persisted across back-nav (T12).
+  const [filter, setFilter] = usePersistedState<Filter>("rr_wishlist_filter", { types: [] });
+  const [search, setSearch] = usePersistedState("rr_wishlist_search", "");
+  const [includeFacets, setIncludeFacets] = usePersistedState<FacetPill[]>("rr_wishlist_incFacets", []);
+  const [excludeFacets, setExcludeFacets] = usePersistedState<FacetPill[]>("rr_wishlist_excFacets", []);
+  const [sort, setSort] = usePersistedState<SortKey>("rr_wishlist_sort", "releaseOld");
+  const [yearRange, setYearRange] = usePersistedState<[number, number]>("rr_wishlist_year", defaultUiFilters().yearRange);
+  const [membership, setMembership] = usePersistedState<{ library?: Membership; wishlist?: Membership }>("rr_wishlist_membership", {});
 
   useEffect(() => { init(); }, []);
 
@@ -188,6 +193,7 @@ export default function DashboardPage() {
     : undefined;
   const availableViews: ViewMode[] = isDateSort ? ["list", "card", "calendar"] : ["list", "card"];
   const effView: ViewMode = !isDateSort && view === "calendar" ? "card" : view;
+  useScrollRestore("rr_wishlist_scroll", !loading && sorted.length > 0);
 
   return (
     <div className="min-h-screen">
@@ -219,15 +225,15 @@ export default function DashboardPage() {
       <main className="max-w-6xl mx-auto px-6 py-6">
         {loading && effView === "list"     && <ListSkeleton />}
         {loading && effView === "card"     && <CardSkeleton />}
-        {loading && effView === "calendar" && <div className="text-center py-20 text-neutral-500">Loading…</div>}
+        {loading && effView === "calendar" && <Spinner label="Loading…" />}
 
-        {!loading && items.length === 0 && <EmptyState identities={identities} />}
+        {!loading && items.length === 0 && <OnboardingState identities={identities} />}
 
         {!loading && items.length > 0 && sorted.length === 0 && (
-          <div className="text-center py-16 text-neutral-500">
-            <p className="mb-2">No results{q ? <> for &ldquo;<span className="text-white">{search}</span>&rdquo;</> : " with these filters"}.</p>
-            <button onClick={() => { setSearch(""); }} className="text-xs text-neutral-400 underline">Clear search</button>
-          </div>
+          <EmptyState
+            title={<>No results{q ? <> for &ldquo;<span className="text-white">{search}</span>&rdquo;</> : " with these filters"}</>}
+            actions={q ? <Button variant="ghost" onClick={() => setSearch("")}>Clear search</Button> : undefined}
+          />
         )}
 
         {!loading && sorted.length > 0 && effView !== "calendar" && (

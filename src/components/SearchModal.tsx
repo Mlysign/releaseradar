@@ -65,7 +65,7 @@ export default function SearchModal({ onClose, onAdded }: SearchModalProps) {
               value={q}
               onChange={(e) => handleInput(e.target.value)}
             />
-            <button onClick={onClose} className="text-neutral-500 hover:text-white text-sm">✕</button>
+            <button onClick={onClose} aria-label="Close search" className="text-neutral-500 hover:text-white text-sm"><span aria-hidden>✕</span></button>
           </div>
           <div className="flex gap-2">
             {["all", "game", "movie", "show"].map((t) => (

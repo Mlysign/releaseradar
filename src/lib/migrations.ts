@@ -124,6 +124,18 @@ export const MIGRATIONS: Migration[] = [
       `).run();
     },
   },
+  {
+    version: 4,
+    name: "child-FK indexes (D7)",
+    up: (db) => {
+      // Index the media_item_id FK on the user cache tables so reverse lookups +
+      // ON DELETE CASCADE from media_items don't scan the whole table.
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_library_media ON user_library(media_item_id);
+        CREATE INDEX IF NOT EXISTS idx_watchlist_media ON user_watchlist(media_item_id);
+      `);
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own
