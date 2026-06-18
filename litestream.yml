@@ -1,0 +1,19 @@
+# Litestream config (P5) — continuous replication of the SQLite DB to S3-compatible
+# object storage (Cloudflare R2 / Backblaze B2 / AWS S3). Copied to /etc/litestream.yml
+# (Litestream's default path) in the Dockerfile. Values come from env vars set in
+# Railway and are expanded by Litestream at startup. Replication only runs when
+# LITESTREAM_BUCKET is set (see docker-entrypoint.sh).
+#
+# For R2/B2 you MUST set LITESTREAM_ENDPOINT (their S3 API endpoint); region can be
+# "auto" for R2. force-path-style is required for non-AWS S3-compatible stores.
+dbs:
+  - path: ${DB_PATH}
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_BUCKET}
+        path: rr.db
+        endpoint: ${LITESTREAM_ENDPOINT}
+        region: ${LITESTREAM_REGION}
+        access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+        force-path-style: true

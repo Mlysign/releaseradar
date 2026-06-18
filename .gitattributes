@@ -1,0 +1,5 @@
+# Shell scripts and the Dockerfile must use LF — CRLF (from Windows checkouts)
+# breaks the shebang / interpreter in the Linux container ("bad interpreter").
+*.sh text eol=lf
+docker-entrypoint.sh text eol=lf
+Dockerfile text eol=lf

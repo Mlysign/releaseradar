@@ -45,7 +45,18 @@ COPY --from=builder /app/public ./public
 # Railway-mounted volume (Railway mounts volumes owned by root, so a non-root user
 # couldn't create rr.db). Fine for a single-tenant app; non-root is a hardening follow-up.
 RUN mkdir -p /app/data
+
+# Litestream for continuous SQLite backups (P5). Static Go binary from the release
+# .deb. Backups are OPT-IN: the entrypoint only activates Litestream when
+# LITESTREAM_BUCKET is set, otherwise it runs `node server.js` directly.
+ADD https://github.com/benbjohnson/litestream/releases/download/v0.3.13/litestream-v0.3.13-linux-amd64.deb /tmp/litestream.deb
+RUN dpkg -i /tmp/litestream.deb && rm /tmp/litestream.deb
+COPY litestream.yml /etc/litestream.yml
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+
 EXPOSE 3000
 
-# Next's minimal standalone server (honors PORT/HOSTNAME set above).
-CMD ["node", "server.js"]
+# Entrypoint runs the standalone server (honors PORT/HOSTNAME), optionally wrapped
+# in Litestream replication. server.js is Next's minimal standalone server.
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
