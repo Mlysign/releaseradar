@@ -7,6 +7,7 @@ import Button from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { COUNTRIES } from "@/lib/countries";
 import { detectCountry } from "@/lib/detectCountry";
+import { syncToCompletion } from "@/lib/syncClient";
 
 function SettingsContent() {
   const router = useRouter();
@@ -82,11 +83,7 @@ function SettingsContent() {
 
   async function syncProvider(provider: string) {
     setSyncing(provider);
-    await fetch("/api/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider }),
-    });
+    await syncToCompletion(provider);
     await fetchMe();
     setSyncing(null);
     setNotice({ msg: `${provider} synced.`, ok: true });

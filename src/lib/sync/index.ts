@@ -1,9 +1,23 @@
 import { randomUUID } from "crypto";
 import { query, run } from "@/lib/db";
 import { MediaSource } from "@/lib/sources/types";
-import { SOURCES } from "@/lib/sources/registry";
+import { SOURCES, getSource } from "@/lib/sources/registry";
 import { ingestWishlistItem, ingestLibraryItem } from "@/lib/sources/ingest";
 import { removeWatchlistSource, removeLibrarySource } from "@/lib/matcher";
+
+// Wall-clock budget for a single sync request (P6). The full ~1,700-item
+// Trakt+Steam+TMDB sync in ONE request spiked memory past Railway's 512 MB and
+// blocked the request; instead each request now processes whole providers only
+// until this budget is spent, then returns the `remaining` provider ids so the
+// caller can resume in a fresh request (memory reclaimed between calls). Tunable
+// via SYNC_BUDGET_MS; a single provider always runs to completion (≥1 provider
+// of progress per request), so this bounds latency without stalling.
+export const DEFAULT_SYNC_BUDGET_MS = 25_000;
+
+export function syncBudgetMs(): number {
+  const raw = Number(process.env.SYNC_BUDGET_MS);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_SYNC_BUDGET_MS;
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 //  Generic sync — pulls every connected provider's wishlist + library through
@@ -97,13 +111,72 @@ export async function syncProvider(userId: string, src: MediaSource): Promise<Pr
   return { provider: src.id, wishlist, library };
 }
 
-// Sync every registered provider (or just one), in registry order.
-export async function syncProviders(userId: string, only?: string): Promise<ProviderSyncResult[]> {
-  const results: ProviderSyncResult[] = [];
-  for (const src of Object.values(SOURCES)) {
-    if (!src) continue;
-    if (only && only !== "all" && only !== src.id) continue;
-    results.push(await syncProvider(userId, src));
+export interface SyncRunResult {
+  results: ProviderSyncResult[];
+  done: boolean;       // false → budget spent, more providers remain
+  remaining: string[]; // provider ids not yet synced this pass (resume with these)
+}
+
+export interface SyncOptions {
+  only?: string;        // "all" | a specific provider id | undefined (→ all)
+  providers?: string[]; // explicit resume subset (overrides `only` when non-empty)
+  budgetMs?: number;    // wall-clock budget; Infinity → drain in one pass
+  now?: () => number;   // injectable clock (tests)
+}
+
+// The ordered, registry-filtered list of provider ids to sync for this request.
+// A client-supplied `providers` resume list is intersected with the registry so
+// junk ids can't drive work. Registry order is preserved.
+export function providerQueue(only?: string, providers?: string[]): string[] {
+  const all = Object.values(SOURCES)
+    .filter((s): s is MediaSource => !!s)
+    .map((s) => s.id);
+  if (providers && providers.length) return all.filter((id) => providers.includes(id));
+  if (only && only !== "all") return all.filter((id) => id === only);
+  return all;
+}
+
+// Pure orchestration (no DB/network) so the budget/resume contract is unit
+// testable: process the queue one provider at a time, stop STARTING new
+// providers once the budget is spent, but always finish the current provider and
+// always make at least one provider of progress. Returns the untouched tail as
+// `remaining`.
+export async function orchestrateSync<T>(
+  queue: string[],
+  budgetMs: number,
+  processOne: (id: string) => Promise<T>,
+  now: () => number = Date.now,
+): Promise<{ results: T[]; done: boolean; remaining: string[] }> {
+  const start = now();
+  const results: T[] = [];
+  for (let i = 0; i < queue.length; i++) {
+    results.push(await processOne(queue[i]));
+    if (now() - start >= budgetMs && i < queue.length - 1) {
+      return { results, done: false, remaining: queue.slice(i + 1) };
+    }
   }
+  return { results, done: true, remaining: [] };
+}
+
+// Resumable, time-budgeted sync (P6). Syncs whole providers until the budget is
+// spent; the caller re-invokes with `remaining` until `done`.
+export async function runSync(userId: string, opts: SyncOptions = {}): Promise<SyncRunResult> {
+  const queue = providerQueue(opts.only, opts.providers);
+  const budgetMs = opts.budgetMs ?? syncBudgetMs();
+  return orchestrateSync(
+    queue,
+    budgetMs,
+    async (id) => {
+      const src = getSource(id)!; // queue is registry-filtered, so this is defined
+      return syncProvider(userId, src);
+    },
+    opts.now,
+  );
+}
+
+// Backward-compatible one-shot: drain every provider in a single pass (no budget).
+// For non-HTTP callers that want the whole result set synchronously.
+export async function syncProviders(userId: string, only?: string): Promise<ProviderSyncResult[]> {
+  const { results } = await runSync(userId, { only, budgetMs: Infinity });
   return results;
 }

@@ -10,6 +10,7 @@ import { FacetPill, VocabMatch, SortKey, SORTS, DATE_SORTS, UiFilters, Membershi
 import FilterPanel from "@/components/discovery/FilterPanel";
 import { matchesFacets, passesYearMembership } from "@/lib/facetFilter";
 import { sortItems, platformRating10 } from "@/lib/sortItems";
+import { syncToCompletion } from "@/lib/syncClient";
 import { usePersistedState, useScrollRestore } from "@/lib/usePersistedState";
 import { buildItemHref } from "@/lib/itemUrl";
 import CalendarView from "@/components/CalendarView";
@@ -56,7 +57,7 @@ export default function LibraryPage() {
 
   async function sync() {
     setSyncing(true);
-    await fetch("/api/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: "all" }) });
+    await syncToCompletion("all");
     await loadItems();
     setSyncing(false);
   }
