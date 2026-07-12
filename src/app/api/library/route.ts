@@ -172,9 +172,20 @@ export const POST = withUser(async (req: NextRequest, session) => {
       try {
         const ctx = await src.context(session.userId);
         if (!ctx?.token) continue;
-        const sourceId = src.resolveSourceId
+        let sourceId = src.resolveSourceId
           ? await src.resolveSourceId(ctx, itemType as MediaType, crossIds, { title: mediaItem.title, year })
           : (crossIds[src.id] != null ? String(crossIds[src.id]) : null);
+        // `crossIds` only covers linked sources (media_links); a Trakt-only item
+        // has no tmdb link, so TMDB's resolveSourceId returns null and the rating
+        // write-back was silently skipped. Fall back to the cross-source ids
+        // captured at merge time (media_external_ids).
+        if (!sourceId) {
+          const ext = get<{ external_id: string }>(
+            "SELECT external_id FROM media_external_ids WHERE media_item_id = ? AND source = ? LIMIT 1",
+            [mediaItemId, src.id]
+          );
+          if (ext?.external_id) sourceId = ext.external_id;
+        }
         if (!sourceId) continue;
         // Persist a newly-resolved cross-ref link (e.g. Trakt id found via TMDB)
         // so subsequent reads/writes find it directly.

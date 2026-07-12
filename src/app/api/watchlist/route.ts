@@ -39,9 +39,21 @@ export const POST = withUser(async (req: NextRequest, session) => {
       try {
         const ctx = await src.context(session.userId);
         if (!ctx?.token) continue;
-        const sourceId = src.resolveSourceId
+        let sourceId = src.resolveSourceId
           ? await src.resolveSourceId(ctx, type, ids, { title, year })
           : (ids[src.id] != null ? String(ids[src.id]) : null);
+        // The client payload often lacks a provider's own id — e.g. adding a
+        // Trakt title sends only its trakt id, so TMDB's resolveSourceId (which
+        // reads ids.tmdb) returns null and the write-back was silently skipped.
+        // We captured cross-source ids at merge time (extractCrossIds →
+        // media_external_ids), so resolve the provider's id from there.
+        if (!sourceId) {
+          const ext = get<{ external_id: string }>(
+            "SELECT external_id FROM media_external_ids WHERE media_item_id = ? AND source = ? LIMIT 1",
+            [mediaItemId, src.id]
+          );
+          if (ext?.external_id) sourceId = ext.external_id;
+        }
         if (!sourceId) continue;
         // Persist the resolved link (esp. when resolved via TMDB) so the item's
         // status and later removal can find this provider.
