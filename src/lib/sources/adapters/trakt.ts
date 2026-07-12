@@ -93,6 +93,13 @@ export const traktSource: MediaSource = {
     await markTraktWatched(ctx.token, type as "movie" | "show", parseInt(sourceId));
   },
 
+  // Clear only the rating (leave the watched history intact — Trakt keeps them
+  // separate, so removing a score shouldn't un-watch the item).
+  async clearRating(ctx, sourceId, type) {
+    if (!ctx.token) return;
+    await removeTraktRating(ctx.token, type as "movie" | "show", parseInt(sourceId));
+  },
+
   // Removing from the library undoes both what pushRating did: clear the rating
   // AND remove the watched-history entry, so a resync doesn't re-pull either.
   async removeFromLibrary(ctx, sourceId, type) {

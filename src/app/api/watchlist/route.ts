@@ -3,6 +3,7 @@ import { withUser } from "@/lib/withUser";
 import { get, run, query } from "@/lib/db";
 import { upsertMediaItem, upsertWatchlistEntry, removeWatchlistSource } from "@/lib/matcher";
 import { persistItemFromIds } from "@/lib/persistItem";
+import { resolveMediaItemFromIds } from "@/lib/userState";
 import { sanitizePosterUrl } from "@/lib/posterUrl";
 import { SOURCES, sourcesForType } from "@/lib/sources/registry";
 import { MediaType, Source } from "@/types";
@@ -74,11 +75,12 @@ export const POST = withUser(async (req: NextRequest, session) => {
 });
 
 export const DELETE = withUser(async (req: NextRequest, session) => {
-    const { mediaItemId, source } = await req.json();
-
-    if (!mediaItemId || typeof mediaItemId !== "string") {
-      return NextResponse.json({ error: "mediaItemId required" }, { status: 400 });
-    }
+    const body = await req.json().catch(() => ({}));
+    const source = body.source;
+    // Prefer the explicit UUID; fall back to resolving it from source ids (a card
+    // that never carried the local UUID). Nothing resolvable → nothing to remove.
+    const mediaItemId: string | null = body.mediaItemId ?? resolveMediaItemFromIds(body.ids);
+    if (!mediaItemId) return NextResponse.json({ ok: true });
 
     // S7: scope the whole operation to the caller's own data. The platform
     // write-back loop below acts on every link of `mediaItemId` using the

@@ -90,6 +90,10 @@ export interface MediaSource {
   pullLibrary?(ctx: SourceContext): Promise<PulledItem[]>;
   pushRating?(ctx: SourceContext, sourceId: string, type: MediaType, appRating: number): Promise<void>;
   pushStatus?(ctx: SourceContext, sourceId: string, type: MediaType, status: string): Promise<void>;
+  // Clear ONLY the rating on the platform, leaving watched/consumed state intact
+  // (Trakt keeps rating + history separate; TMDB has only a rating). Used when the
+  // user removes their score but keeps the item watched.
+  clearRating?(ctx: SourceContext, sourceId: string, type: MediaType): Promise<void>;
   // Undo library membership on the platform: clear the rating AND un-mark watched
   // so a later resync doesn't re-pull the removed state. Present when the platform
   // can write ratings/status. (TMDB has no watched concept → clears the rating.)

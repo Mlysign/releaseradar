@@ -3,7 +3,7 @@ import { withUser } from "@/lib/withUser";
 import { query, get } from "@/lib/db";
 import { mergeLinks } from "@/lib/merge";
 import { getUserCountry } from "@/lib/userCountry";
-import { getUserStateMap } from "@/lib/userState";
+import { getUserStateMap, resolveMediaItemFromIds } from "@/lib/userState";
 import { MediaLink, EnrichedItem, MediaType } from "@/types";
 import { sourcesForType } from "@/lib/sources/registry";
 import { upsertMediaItem, recordLibraryRating, clearLibrary } from "@/lib/matcher";
@@ -199,6 +199,10 @@ export const POST = withUser(async (req: NextRequest, session) => {
         if (rating != null && src.capabilities.rating.write && src.pushRating) {
           await src.pushRating(ctx, sourceId, itemType as MediaType, rating);
           ratedSources.push(src.id);
+        } else if (rating === null && src.capabilities.rating.write && src.clearRating) {
+          // User removed their score but kept the item watched → clear the
+          // rating on the platform only (don't touch watched history).
+          await src.clearRating(ctx, sourceId, itemType as MediaType);
         } else if (inferredStatus && src.capabilities.status.write && src.pushStatus) {
           await src.pushStatus(ctx, sourceId, itemType as MediaType, inferredStatus);
         }
@@ -230,8 +234,11 @@ export const POST = withUser(async (req: NextRequest, session) => {
 // Remove an item from the library (clears status + rating). Used by the card
 // "watched" toggle when turning it off. Body: { mediaItemId }.
 export const DELETE = withUser(async (req: NextRequest, session) => {
-  const { mediaItemId } = await req.json();
-  if (!mediaItemId) return NextResponse.json({ error: "mediaItemId required" }, { status: 400 });
+  const body = await req.json().catch(() => ({}));
+  // Prefer the explicit UUID; fall back to resolving it from source ids (a card
+  // that never carried the local UUID). Nothing resolvable → nothing to remove.
+  const mediaItemId: string | null = body.mediaItemId ?? resolveMediaItemFromIds(body.ids);
+  if (!mediaItemId) return NextResponse.json({ ok: true });
 
   // Propagate the removal to every connected platform BEFORE clearing locally.
   // Otherwise the rating/watched state lingers on Trakt/TMDB and the next sync

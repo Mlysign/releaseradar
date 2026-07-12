@@ -80,8 +80,9 @@ export function useQuickActions(item: QuickActionItem) {
         const d = await res.json();
         if (d.mediaItemId) mediaIdRef.current = d.mediaItemId;
       } else {
-        if (!mediaIdRef.current) throw new Error("no id");
-        const res = await fetch("/api/watchlist", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaItemId: mediaIdRef.current }) });
+        // Send identity too: discover/feed cards may not carry the local
+        // media_item UUID, so the server resolves it from the source ids.
+        const res = await fetch("/api/watchlist", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaItemId: mediaIdRef.current ?? undefined, ...identity() }) });
         if (!res.ok) throw new Error();
       }
     } catch {
@@ -112,8 +113,9 @@ export function useQuickActions(item: QuickActionItem) {
       const prevStatus = status, prevRating = rating;
       setStatus(null); setRating(null);
       try {
-        if (!mediaIdRef.current) throw new Error("no id");
-        const res = await fetch("/api/library", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaItemId: mediaIdRef.current }) });
+        // Send identity too: discover/feed cards may not carry the local
+        // media_item UUID, so the server resolves it from the source ids.
+        const res = await fetch("/api/library", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaItemId: mediaIdRef.current ?? undefined, ...identity() }) });
         if (!res.ok) throw new Error();
       } catch {
         setStatus(prevStatus); setRating(prevRating);

@@ -70,4 +70,18 @@ export function resolveMediaIdsBySource(pairs: { source: string; sourceId: strin
   return map;
 }
 
+// Resolve a single canonical media_item id from a bag of source ids
+// ({ tmdb: 123, trakt: 456 }). Used by the removal endpoints so a card that
+// doesn't carry the local UUID (discover/feed items) can still be removed.
+// Returns the first matching item, or null when none of the ids are known.
+export function resolveMediaItemFromIds(ids: Record<string, unknown> | null | undefined): string | null {
+  if (!ids) return null;
+  const pairs = Object.entries(ids)
+    .filter(([, v]) => v != null)
+    .map(([source, sourceId]) => ({ source, sourceId: String(sourceId) }));
+  if (!pairs.length) return null;
+  for (const mid of resolveMediaIdsBySource(pairs).values()) return mid;
+  return null;
+}
+
 export { EMPTY as EMPTY_USER_STATE };

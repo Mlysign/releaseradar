@@ -88,8 +88,13 @@ export const tmdbSource: MediaSource = {
     await setTmdbRating(ctx.token, type === "show" ? "tv" : "movie", parseInt(sourceId), value);
   },
 
-  // TMDB has no "watched" concept beyond the rating, so removing from the library
-  // just deletes the rating.
+  // TMDB has no "watched" concept beyond the rating, so both clearing the rating
+  // and removing from the library reduce to deleting the rating.
+  async clearRating(ctx, sourceId, type) {
+    if (!ctx.token) return;
+    await deleteTmdbRating(ctx.token, type === "show" ? "tv" : "movie", parseInt(sourceId));
+  },
+
   async removeFromLibrary(ctx, sourceId, type) {
     if (!ctx.token) return;
     await deleteTmdbRating(ctx.token, type === "show" ? "tv" : "movie", parseInt(sourceId));
