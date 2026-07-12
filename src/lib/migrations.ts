@@ -150,6 +150,21 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 6,
+    name: "users.session_epoch (S4 session revocation)",
+    up: (db) => {
+      // Monotonic per-user token generation. Every JWT is minted carrying the
+      // epoch current at sign time; getSession() rejects a token whose epoch is
+      // behind the user's. Bumping it (logout / disconnect) instantly revokes
+      // every outstanding token for that user. DEFAULT 0 = legacy tokens (which
+      // carry no epoch, read as 0) stay valid until the first bump → non-breaking.
+      const cols = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+      if (!cols.some((c) => c.name === "session_epoch")) {
+        db.exec("ALTER TABLE users ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0");
+      }
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own

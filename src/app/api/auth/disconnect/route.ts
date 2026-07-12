@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { run, query } from "@/lib/db";
+import { createSession, setSessionCookie, bumpSessionEpoch } from "@/lib/session";
+import { Source } from "@/types";
 
 export const POST = withUser(async (req: NextRequest, session) => {
   const { provider } = await req.json();
@@ -8,8 +10,8 @@ export const POST = withUser(async (req: NextRequest, session) => {
   if (!provider) return NextResponse.json({ error: "provider required" }, { status: 400 });
 
   // Must have at least one other identity remaining
-  const allIdentities = query(
-    "SELECT id, provider FROM user_identities WHERE user_id = ?",
+  const allIdentities = query<{ id: string; provider: string; display_name: string | null }>(
+    "SELECT id, provider, display_name FROM user_identities WHERE user_id = ?",
     [session.userId]
   );
   if (allIdentities.length <= 1) {
@@ -41,5 +43,19 @@ export const POST = withUser(async (req: NextRequest, session) => {
     }
   }
 
-  return NextResponse.json({ ok: true });
+  // Revoke every outstanding token for this user (S4) — in particular any session
+  // minted from the identity we just removed. Then re-issue a fresh cookie for
+  // THIS device against a still-connected identity, so disconnecting a provider
+  // doesn't log the acting user out (but any OTHER devices are signed out).
+  bumpSessionEpoch(session.userId);
+  const remaining = allIdentities.find((i) => i.provider !== provider) ?? allIdentities[0];
+  const token = await createSession({
+    userId: session.userId,
+    identityId: remaining.id,
+    provider: remaining.provider as Source,
+    displayName: remaining.display_name,
+  });
+  const res = NextResponse.json({ ok: true });
+  res.cookies.set(setSessionCookie(token));
+  return res;
 });

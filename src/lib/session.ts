@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { get, run } from "@/lib/db";
 import { SessionUser } from "@/types";
 
 // Sessions are signed with JWT_SECRET. Refuse to run in production without it
@@ -27,8 +28,23 @@ function getSecret(): Uint8Array {
 
 export const SESSION_COOKIE = "rr2_session";
 
+// Session revocation (S4). Every token is stamped with the user's session_epoch
+// at sign time; a token whose stamp is behind the user's current epoch is
+// rejected. Bumping the epoch (logout / disconnect) therefore invalidates every
+// outstanding token for that user server-side — the 30-day cookie is no longer
+// un-revocable. Legacy tokens carry no epoch (read as 0) and stay valid until
+// the first bump, so the rollout is non-breaking.
+function currentEpoch(userId: string): number {
+  const row = get<{ session_epoch: number }>("SELECT session_epoch FROM users WHERE id = ?", [userId]);
+  return row?.session_epoch ?? 0;
+}
+
+export function bumpSessionEpoch(userId: string): void {
+  run("UPDATE users SET session_epoch = session_epoch + 1 WHERE id = ?", [userId]);
+}
+
 export async function createSession(user: SessionUser): Promise<string> {
-  return new SignJWT({ ...user })
+  return new SignJWT({ ...user, se: currentEpoch(user.userId) })
     .setProtectedHeader({ alg: "HS256" })
     .setExpirationTime("30d")
     .setIssuedAt()
@@ -41,7 +57,10 @@ export async function getSession(): Promise<SessionUser | null> {
     const token = store.get(SESSION_COOKIE)?.value;
     if (!token) return null;
     const { payload } = await jwtVerify(token, getSecret());
-    return payload as unknown as SessionUser;
+    const user = payload as unknown as SessionUser & { se?: number };
+    // Reject tokens revoked by an epoch bump since they were issued.
+    if ((payload.se as number | undefined ?? 0) !== currentEpoch(user.userId)) return null;
+    return user;
   } catch {
     return null;
   }
