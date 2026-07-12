@@ -4,6 +4,7 @@
 // preference model. Generalizes the old tag-only `analyzeLibraryTags`.
 
 import { query, get } from "@/lib/db";
+import { BoundedCache } from "@/lib/boundedCache";
 import { mergeLinks } from "@/lib/merge";
 import { parseRatings, averageRating, representativeCommunity } from "@/lib/ratings";
 import { extractFacets, facetId, FacetKind, FacetRole } from "@/lib/facets";
@@ -154,7 +155,9 @@ export function analyzeLibraryFacets(userId: string): LibraryFacetAnalysis {
 
 // ── Cache (the analysis is identical until the library changes) ────
 
-const _cache = new Map<string, { sig: string; data: LibraryFacetAnalysis }>();
+// Per-user; sig-invalidated on read. Size-capped so it can't grow unbounded
+// across many users on the single long-lived process (P2).
+const _cache = new BoundedCache<string, { sig: string; data: LibraryFacetAnalysis }>({ max: 500 });
 
 export function librarySignature(userId: string): string {
   // D6: COUNT/MAX(reviewed_at)/SUM(rating) alone miss two offsetting edits

@@ -6,6 +6,7 @@
 // catalog with explainable reasons — plus extensive filtering and sorting.
 
 import { query, get } from "@/lib/db";
+import { BoundedCache } from "@/lib/boundedCache";
 import { mergeLinks, extractYear } from "@/lib/merge";
 import { representativeCommunity, averageCommunity } from "@/lib/ratings";
 import { getUserStateMap } from "@/lib/userState";
@@ -177,7 +178,9 @@ export interface Profile {
   hasSignal: boolean;
 }
 
-const _profileCache = new Map<string, { sig: string; profile: Profile }>();
+// Per-user; sig-invalidated on read. Capped so many distinct users can't grow it
+// without bound (single-instance, P2).
+const _profileCache = new BoundedCache<string, { sig: string; profile: Profile }>({ max: 500 });
 
 export function buildProfile(userId: string): Profile {
   const sig = librarySignature(userId);
@@ -466,7 +469,7 @@ export function itemsWithFacet(ref: { kind: string; role?: FacetRole; key: strin
 
 // Resolve a person facet to its TMDB person id by reading the credits of one
 // catalog item that carries them — so the detail page can fetch bio/age. Cached.
-const _personIdCache = new Map<string, number | null>();
+const _personIdCache = new BoundedCache<string, number | null>({ max: 5000 });
 export function resolvePersonTmdbId(role: string, key: string): number | null {
   const ck = `${role}:${key}`;
   if (_personIdCache.has(ck)) return _personIdCache.get(ck)!;
@@ -486,7 +489,7 @@ export function resolvePersonTmdbId(role: string, key: string): number | null {
 
 // Resolve a game developer/publisher facet to its RAWG entity id (for pulling
 // their catalog), by reading one carrying item's rawg raw_data. Cached.
-const _rawgEntityCache = new Map<string, number | null>();
+const _rawgEntityCache = new BoundedCache<string, number | null>({ max: 5000 });
 export function resolveRawgEntityId(role: string, key: string): number | null {
   const ck = `${role}:${key}`;
   if (_rawgEntityCache.has(ck)) return _rawgEntityCache.get(ck)!;

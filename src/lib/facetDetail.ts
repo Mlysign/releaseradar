@@ -14,6 +14,7 @@
 // Sampling blends popularity with recency on purpose: popularity-only over-
 // represents hits and inflates the crowd average.
 
+import { BoundedCache } from "@/lib/boundedCache";
 import { itemsWithFacet, resolvePersonTmdbId, resolveRawgEntityId, DiscoveryVector } from "@/lib/discovery";
 import { getLibraryFacetAnalysis } from "@/lib/libraryAnalysis";
 import { getUserStateMap, resolveMediaIdsBySource } from "@/lib/userState";
@@ -117,7 +118,7 @@ async function rawgJson(path: string): Promise<any | null> {
   } catch { return null; }
 }
 
-const _personCache = new Map<number, PersonMeta | null>();
+const _personCache = new BoundedCache<number, PersonMeta | null>({ max: 2000 });
 async function fetchPersonMeta(id: number): Promise<PersonMeta | null> {
   if (_personCache.has(id)) return _personCache.get(id)!;
   const d = await tmdbJson(`/person/${id}`);
@@ -254,7 +255,7 @@ async function tagTitles(key: string): Promise<ExtTitle[]> {
   return out;
 }
 
-const _tmdbCompanyCache = new Map<string, number | null>();
+const _tmdbCompanyCache = new BoundedCache<string, number | null>({ max: 5000 });
 async function resolveTmdbCompanyId(label: string): Promise<number | null> {
   const ck = label.toLowerCase();
   if (_tmdbCompanyCache.has(ck)) return _tmdbCompanyCache.get(ck)!;

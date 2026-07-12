@@ -6,6 +6,7 @@
 // (with keywords/tags) is fetched later by persistItemFromIds during ingestion.
 
 import { MediaType } from "@/types";
+import { BoundedCache } from "@/lib/boundedCache";
 
 const TMDB = process.env.TMDB_API_KEY!;
 const RAWG = process.env.RAWG_API_KEY!;
@@ -52,7 +53,7 @@ export function rawgTagSlug(key: string): string {
 }
 
 // ── TMDB keyword id resolution (cached) ───────────────────────────
-const _keywordCache = new Map<string, number | null>();
+const _keywordCache = new BoundedCache<string, number | null>({ max: 5000 });
 
 export async function resolveTmdbKeywordId(name: string): Promise<number | null> {
   if (_keywordCache.has(name)) return _keywordCache.get(name)!;

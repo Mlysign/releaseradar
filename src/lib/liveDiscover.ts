@@ -13,6 +13,7 @@
 // with only a wishlist still gets a feed) + a gentle original-language affinity
 // and a crowd-vote floor.
 
+import { BoundedCache } from "@/lib/boundedCache";
 import { buildProfile, scoreFacets, getCatalogIdf, ROLE_WEIGHT, Reason } from "@/lib/discovery";
 import { getMembershipSignal } from "@/lib/libraryAnalysis";
 import { extractFacets, tagKey, Facet } from "@/lib/facets";
@@ -103,7 +104,9 @@ function listFacets(c: FeedCandidate): Facet[] {
 // Also returns the merged poster so Trakt-sourced candidates (which carry no
 // image) get one once hydrated through their TMDB id.
 interface Hydrated { facets: Facet[]; posterUrl: string | null }
-const _facetCache = new Map<string, Hydrated>();
+// LRU-capped: hydration is expensive (a TMDB detail fetch) so we keep recent
+// results, but the cap prevents unbounded growth over long uptime (P2).
+const _facetCache = new BoundedCache<string, Hydrated>({ max: 3000 });
 
 async function hydrateFacets(c: FeedCandidate): Promise<Hydrated> {
   const ck = `${c.source}:${c.rawId}`;
@@ -124,7 +127,6 @@ async function hydrateFacets(c: FeedCandidate): Promise<Hydrated> {
     }
   } catch { /* fall back to list facets */ }
 
-  if (_facetCache.size > 3000) _facetCache.clear();
   _facetCache.set(ck, result);
   return result;
 }
@@ -231,9 +233,10 @@ export interface PersonalizedItem {
   score: number; reasons: Reason[];
 }
 
-interface CacheEntry { at: number; items: PersonalizedItem[] }
-const _feedCache = new Map<string, CacheEntry>();
 const FEED_TTL_MS = 45 * 60 * 1000;
+// Keyed by `${userId}:${region}`. TTL expiry + a size cap so stale/for-many-users
+// entries can't accumulate on the long-lived process (P2).
+const _feedCache = new BoundedCache<string, PersonalizedItem[]>({ max: 500, ttlMs: FEED_TTL_MS });
 
 export function invalidatePersonalizedFeed(userId?: string) {
   if (!userId) { _feedCache.clear(); return; }
@@ -246,7 +249,7 @@ export async function personalizedFeed(userId: string, region: string): Promise<
 
   const key = `${userId}:${region}`;
   const hit = _feedCache.get(key);
-  if (hit && Date.now() - hit.at < FEED_TTL_MS) return hit.items;
+  if (hit) return hit;
 
   const idf = getCatalogIdf();
   // Each medium pulls from two sources in parallel: RAWG + IGDB (games),
@@ -278,7 +281,7 @@ export async function personalizedFeed(userId: string, region: string): Promise<
     score, reasons,
   }));
 
-  _feedCache.set(key, { at: Date.now(), items });
+  _feedCache.set(key, items);
   return items;
 }
 
