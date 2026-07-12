@@ -90,6 +90,10 @@ export interface MediaSource {
   pullLibrary?(ctx: SourceContext): Promise<PulledItem[]>;
   pushRating?(ctx: SourceContext, sourceId: string, type: MediaType, appRating: number): Promise<void>;
   pushStatus?(ctx: SourceContext, sourceId: string, type: MediaType, status: string): Promise<void>;
+  // Undo library membership on the platform: clear the rating AND un-mark watched
+  // so a later resync doesn't re-pull the removed state. Present when the platform
+  // can write ratings/status. (TMDB has no watched concept → clears the rating.)
+  removeFromLibrary?(ctx: SourceContext, sourceId: string, type: MediaType): Promise<void>;
 
   // Cross-enrich a freshly-persisted item with secondary source links (e.g.
   // Trakt/Letterboxd → TMDB, Steam ↔ RAWG). `kind` lets the adapter skip

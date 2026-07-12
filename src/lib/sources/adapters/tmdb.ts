@@ -3,7 +3,7 @@ import { MediaSource, PulledItem } from "../types";
 import { CATALOG } from "../catalog";
 import {
   getTmdbWatchlistMovies, getTmdbWatchlistShows, getTmdbRatedMovies, getTmdbRatedShows,
-  setTmdbWatchlist, setTmdbRating,
+  setTmdbWatchlist, setTmdbRating, deleteTmdbRating,
 } from "../tmdb";
 
 function safeParse(s: string): any {
@@ -86,6 +86,13 @@ export const tmdbSource: MediaSource = {
     // App stores 0–10; TMDB accepts 0.5–10 → clamp + round to the nearest 0.5.
     const value = Math.max(0.5, Math.min(10, Math.round(appRating * 2) / 2));
     await setTmdbRating(ctx.token, type === "show" ? "tv" : "movie", parseInt(sourceId), value);
+  },
+
+  // TMDB has no "watched" concept beyond the rating, so removing from the library
+  // just deletes the rating.
+  async removeFromLibrary(ctx, sourceId, type) {
+    if (!ctx.token) return;
+    await deleteTmdbRating(ctx.token, type === "show" ? "tv" : "movie", parseInt(sourceId));
   },
 
   // No pushStatus — TMDB cannot represent "watched" without a rating.

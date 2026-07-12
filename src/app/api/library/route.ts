@@ -232,6 +232,49 @@ export const POST = withUser(async (req: NextRequest, session) => {
 export const DELETE = withUser(async (req: NextRequest, session) => {
   const { mediaItemId } = await req.json();
   if (!mediaItemId) return NextResponse.json({ error: "mediaItemId required" }, { status: 400 });
+
+  // Propagate the removal to every connected platform BEFORE clearing locally.
+  // Otherwise the rating/watched state lingers on Trakt/TMDB and the next sync
+  // re-pulls it (the reported bug). Mirrors the POST write-back's id resolution:
+  // media_links cross-ids + the media_external_ids fallback for cross-referenced
+  // items (e.g. a Trakt-only item resolving its tmdb id).
+  const mediaItem = get<{ type: string; title: string; release_date: string | null }>(
+    "SELECT type, title, release_date FROM media_items WHERE id = ?",
+    [mediaItemId]
+  );
+  if (mediaItem) {
+    const itemType = mediaItem.type as MediaType;
+    const links = query<{ source: string; source_id: string }>(
+      "SELECT source, source_id FROM media_links WHERE media_item_id = ?",
+      [mediaItemId]
+    );
+    const crossIds: Record<string, string> = {};
+    for (const l of links) crossIds[l.source] = l.source_id;
+    const year = mediaItem.release_date ? parseInt(String(mediaItem.release_date).slice(0, 4)) : undefined;
+    for (const src of sourcesForType(itemType)) {
+      if (!src.removeFromLibrary || (!src.capabilities.rating.write && !src.capabilities.status.write)) continue;
+      try {
+        const ctx = await src.context(session.userId);
+        if (!ctx?.token) continue;
+        let sourceId = src.resolveSourceId
+          ? await src.resolveSourceId(ctx, itemType, crossIds, { title: mediaItem.title, year })
+          : (crossIds[src.id] != null ? String(crossIds[src.id]) : null);
+        if (!sourceId) {
+          const ext = get<{ external_id: string }>(
+            "SELECT external_id FROM media_external_ids WHERE media_item_id = ? AND source = ? LIMIT 1",
+            [mediaItemId, src.id]
+          );
+          if (ext?.external_id) sourceId = ext.external_id;
+        }
+        if (!sourceId) continue;
+        await src.removeFromLibrary(ctx, sourceId, itemType);
+        console.log(`[library] Removed from ${src.id}: ${sourceId}`);
+      } catch (e) {
+        console.error(`[library] ${src.id} remove-from-library failed:`, e);
+      }
+    }
+  }
+
   clearLibrary(session.userId, mediaItemId);
   return NextResponse.json({ ok: true });
 });

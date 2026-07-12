@@ -268,3 +268,42 @@ export async function markTraktWatched(
     throw new Error("Trakt mark watched failed: " + res.status + " " + body);
   }
 }
+
+// Remove a rating from Trakt (/sync/ratings/remove). Used when the user clears
+// a rating / removes an item from their library, so a later resync doesn't
+// re-pull the stale rating.
+export async function removeTraktRating(
+  accessToken: string,
+  type: "movie" | "show",
+  traktId: number
+): Promise<void> {
+  const key = type === "movie" ? "movies" : "shows";
+  const res = await fetch(`${BASE}/sync/ratings/remove`, {
+    method: "POST",
+    headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ [key]: [{ ids: { trakt: traktId } }] }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Trakt remove rating failed: ${res.status} ${body}`);
+  }
+}
+
+// Remove watched-history entries for an item from Trakt (/sync/history/remove),
+// so removing it from the library also un-marks it as watched.
+export async function removeTraktFromHistory(
+  accessToken: string,
+  type: "movie" | "show",
+  traktId: number
+): Promise<void> {
+  const key = type === "movie" ? "movies" : "shows";
+  const res = await fetch(`${BASE}/sync/history/remove`, {
+    method: "POST",
+    headers: { ...HEADERS, Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ [key]: [{ ids: { trakt: traktId } }] }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Trakt remove history failed: ${res.status} ${body}`);
+  }
+}

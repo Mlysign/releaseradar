@@ -6,7 +6,7 @@ import {
   refreshTraktToken, getTraktIdByTmdb,
   addMovieToTraktWatchlist, addShowToTraktWatchlist,
   removeMovieFromTraktWatchlist, removeShowFromTraktWatchlist,
-  rateTraktItem, markTraktWatched,
+  rateTraktItem, markTraktWatched, removeTraktRating, removeTraktFromHistory,
   getTraktWatchlistMovies, getTraktWatchlistShows,
   getTraktWatchedMovies, getTraktWatchedShows,
   getTraktRatingsMovies, getTraktRatingsShows,
@@ -91,6 +91,16 @@ export const traktSource: MediaSource = {
   async pushStatus(ctx, sourceId, type) {
     if (!ctx.token) return;
     await markTraktWatched(ctx.token, type as "movie" | "show", parseInt(sourceId));
+  },
+
+  // Removing from the library undoes both what pushRating did: clear the rating
+  // AND remove the watched-history entry, so a resync doesn't re-pull either.
+  async removeFromLibrary(ctx, sourceId, type) {
+    if (!ctx.token) return;
+    const id = parseInt(sourceId);
+    const t = type as "movie" | "show";
+    await removeTraktRating(ctx.token, t, id);
+    await removeTraktFromHistory(ctx.token, t, id);
   },
 
   async pullWishlist(ctx) {
