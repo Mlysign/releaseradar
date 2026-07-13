@@ -7,6 +7,7 @@ import { resolveMediaItemFromIds } from "@/lib/userState";
 import { sanitizePosterUrl } from "@/lib/posterUrl";
 import { parseJsonBody } from "@/lib/validate";
 import { WatchlistPostSchema, WatchlistDeleteSchema } from "@/lib/schemas";
+import { log, errorFields } from "@/lib/logger";
 import { SOURCES, sourcesForType } from "@/lib/sources/registry";
 import { MediaType, Source } from "@/types";
 
@@ -67,8 +68,8 @@ export const POST = withUser(async (req: NextRequest, session) => {
         }
         await src.pushWishlist!(ctx, sourceId, type, true);
         upsertWatchlistEntry(session.userId, mediaItemId, src.id);
-        console.log(`[watchlist] Added to ${src.id}: ${sourceId}`);
-      } catch (e) { console.error(`[watchlist] ${src.id} write-back failed:`, e); }
+        log.info("watchlist_writeback", { op: "add", source: src.id, sourceId, mediaItemId });
+      } catch (e) { log.error("watchlist_writeback_failed", { op: "add", source: src.id, mediaItemId, ...errorFields(e) }); }
     }
 
     return NextResponse.json({ ok: true, mediaItemId });
@@ -111,8 +112,8 @@ export const DELETE = withUser(async (req: NextRequest, session) => {
         const ctx = await src.context(session.userId);
         if (!ctx?.token) continue;
         await src.pushWishlist!(ctx, link.source_id, (itemType ?? src.mediaTypes[0]), false);
-        console.log(`[watchlist] Removed from ${link.source}: ${link.source_id}`);
-      } catch (e) { console.error(`[watchlist] ${link.source} remove failed:`, e); }
+        log.info("watchlist_writeback", { op: "remove", source: link.source, sourceId: link.source_id, mediaItemId });
+      } catch (e) { log.error("watchlist_writeback_failed", { op: "remove", source: link.source, mediaItemId, ...errorFields(e) }); }
     }
 
     // ── Local DB removal ──────────────────────────────────────────

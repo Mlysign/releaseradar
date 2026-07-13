@@ -11,6 +11,7 @@ import { persistItemFromIds } from "@/lib/persistItem";
 import { parseRatings, averageRating } from "@/lib/ratings";
 import { parseJsonBody } from "@/lib/validate";
 import { LibraryPostSchema, LibraryDeleteSchema } from "@/lib/schemas";
+import { log, errorFields } from "@/lib/logger";
 
 export const GET = withUser(async (req: NextRequest, session) => {
     const { searchParams } = req.nextUrl;
@@ -279,9 +280,9 @@ export const DELETE = withUser(async (req: NextRequest, session) => {
         }
         if (!sourceId) continue;
         await src.removeFromLibrary(ctx, sourceId, itemType);
-        console.log(`[library] Removed from ${src.id}: ${sourceId}`);
+        log.info("library_writeback", { op: "remove", source: src.id, sourceId, mediaItemId });
       } catch (e) {
-        console.error(`[library] ${src.id} remove-from-library failed:`, e);
+        log.error("library_writeback_failed", { op: "remove", source: src.id, mediaItemId, ...errorFields(e) });
       }
     }
   }
