@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Logo from "@/components/Logo";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -39,6 +40,7 @@ export default function LoginPage() {
     <main className="min-h-screen flex flex-col items-center justify-center px-4">
       <div className="max-w-sm w-full space-y-8 text-center">
         <div>
+          <Logo size={56} className="mx-auto mb-4" />
           <h1 className="text-4xl font-bold mb-2">Fandex</h1>
           <p className="text-neutral-400">Track your wishlists, discover what you&apos;ll love, and see what&apos;s coming — games, movies &amp; shows, all in one place.</p>
         </div>

@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { useState } from "react";
+import Logo from "@/components/Logo";
 
 const NAV_LINKS = [
   { href: "/discover",   label: "Discover" },
@@ -29,7 +30,10 @@ export default function NavBar() {
 
   return (
     <nav className="border-b border-neutral-800 px-6 flex items-center justify-between sticky top-0 bg-neutral-950 z-30 h-14">
-      <span className="font-bold text-base tracking-tight">Fandex</span>
+      <Link href="/dashboard" className="flex items-center gap-2">
+        <Logo size={24} />
+        <span className="font-bold text-base tracking-tight">Fandex</span>
+      </Link>
 
       {/* Desktop links (md+) */}
       <div className="hidden md:flex items-center gap-1">

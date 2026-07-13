@@ -3,6 +3,7 @@
 // manifest + iOS need. Re-run after editing the SVG or swapping in real art:
 //   node scripts/gen-icons.mjs
 import sharp from "sharp";
+import { writeFileSync } from "node:fs";
 
 // Full-bleed square (works as both a normal and a maskable icon): the gradient
 // reaches every edge and the "F" monogram sits inside the maskable safe zone
@@ -29,9 +30,15 @@ const targets = [
   [512, "public/icon-512.png"],
   [512, "public/icon-maskable-512.png"],
   [180, "src/app/apple-icon.png"], // Next app-icon convention → auto apple-touch-icon link
+  [256, "src/app/icon.png"], // browser-tab favicon (PNG fallback for non-SVG browsers)
 ];
 
 for (const [size, out] of targets) {
   await sharp(buf).resize(size, size).png().toFile(out);
   console.log(`wrote ${out} (${size}x${size})`);
 }
+
+// Scalable favicon — modern browsers prefer this over the PNG. Next links both
+// (app/icon.svg + app/icon.png); the old default favicon.ico is removed.
+writeFileSync("src/app/icon.svg", SVG);
+console.log("wrote src/app/icon.svg");
