@@ -5,6 +5,8 @@ import { rawgLogin } from "@/lib/sources/rawg";
 import { createSession, setSessionCookie, getSession } from "@/lib/session";
 import { enforceRateLimit, clientIp } from "@/lib/rateLimit";
 import { encryptSecret } from "@/lib/crypto";
+import { parseJsonBody, BadRequestError } from "@/lib/validate";
+import { RawgLoginSchema } from "@/lib/schemas";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,11 +15,7 @@ export async function POST(req: NextRequest) {
     const limited = enforceRateLimit(`rawg-login:${clientIp(req)}`, 5, 60_000);
     if (limited) return limited;
 
-    const { email, password } = await req.json();
-
-    if (!email || !password) {
-      return NextResponse.json({ error: "Email and password required" }, { status: 400 });
-    }
+    const { email, password } = await parseJsonBody(req, RawgLoginSchema);
 
     // Authenticate with RAWG – returns token + slug
     let token: string;
@@ -86,6 +84,10 @@ export async function POST(req: NextRequest) {
     }
     return res;
   } catch (e: any) {
+    // S8: malformed body → 400, not a generic 500.
+    if (e instanceof BadRequestError) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
     console.error("[RAWG auth]", e);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
   }

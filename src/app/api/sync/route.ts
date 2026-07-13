@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withUser } from "@/lib/withUser";
 import { runSync, syncBudgetMs } from "@/lib/sync";
+import { parseJsonBody } from "@/lib/validate";
+import { SyncPostSchema } from "@/lib/schemas";
 
 export const POST = withUser(async (req: NextRequest, session) => {
-  const body = await req.json().catch(() => ({}));
-  const only: string | undefined = typeof body?.provider === "string" ? body.provider : undefined;
-  const providers: string[] | undefined = Array.isArray(body?.providers)
-    ? body.providers.filter((p: unknown): p is string => typeof p === "string")
-    : undefined;
+  // S8: validate + type the body (P6 sends `provider` for a fresh run or
+  // `providers` for a resume). `only` may be a source id or "all".
+  const { provider: only, providers } = await parseJsonBody(req, SyncPostSchema, { allowEmpty: true });
 
   console.log(
     `[sync] user ${session.userId} · ${providers?.length ? `resume [${providers.join(",")}]` : `provider ${only ?? "all"}`}`,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/session";
 import { enforceRateLimit } from "@/lib/rateLimit";
+import { BadRequestError } from "@/lib/validate";
 import { SessionUser } from "@/types";
 
 // Per-user cap across all authed routes (S3/P7). These routes proxy third-party
@@ -30,6 +31,10 @@ export function withUser<A extends unknown[]>(
     try {
       return await handler(req, session, ...rest);
     } catch (e) {
+      // S8: schema-validation failures are the caller's fault → 400, not 500.
+      if (e instanceof BadRequestError) {
+        return NextResponse.json({ error: e.message }, { status: 400 });
+      }
       const path = (() => { try { return new URL(req.url).pathname; } catch { return req.url; } })();
       console.error(`[api] ${req.method} ${path}:`, e);
       return NextResponse.json({ error: "Server error" }, { status: 500 });

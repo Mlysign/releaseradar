@@ -5,14 +5,14 @@ import { upsertMediaItem, upsertWatchlistEntry, removeWatchlistSource } from "@/
 import { persistItemFromIds } from "@/lib/persistItem";
 import { resolveMediaItemFromIds } from "@/lib/userState";
 import { sanitizePosterUrl } from "@/lib/posterUrl";
+import { parseJsonBody } from "@/lib/validate";
+import { WatchlistPostSchema, WatchlistDeleteSchema } from "@/lib/schemas";
 import { SOURCES, sourcesForType } from "@/lib/sources/registry";
 import { MediaType, Source } from "@/types";
 
 export const POST = withUser(async (req: NextRequest, session) => {
-    const body = await req.json();
-    const { type, title, releaseDate, posterUrl, ids, targetProvider } = body;
-
-    if (!ids || !type) return NextResponse.json({ error: "ids and type required" }, { status: 400 });
+    const { type, title, releaseDate, posterUrl, ids, targetProvider } =
+      await parseJsonBody(req, WatchlistPostSchema);
 
     // S12: only persist/reflect a poster URL from a trusted media-CDN host.
     const safePosterUrl = sanitizePosterUrl(posterUrl);
@@ -75,7 +75,7 @@ export const POST = withUser(async (req: NextRequest, session) => {
 });
 
 export const DELETE = withUser(async (req: NextRequest, session) => {
-    const body = await req.json().catch(() => ({}));
+    const body = await parseJsonBody(req, WatchlistDeleteSchema, { allowEmpty: true });
     const source = body.source;
     // Prefer the explicit UUID; fall back to resolving it from source ids (a card
     // that never carried the local UUID). Nothing resolvable → nothing to remove.

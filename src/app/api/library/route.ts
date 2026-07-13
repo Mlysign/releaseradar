@@ -9,6 +9,8 @@ import { sourcesForType } from "@/lib/sources/registry";
 import { upsertMediaItem, recordLibraryRating, clearLibrary } from "@/lib/matcher";
 import { persistItemFromIds } from "@/lib/persistItem";
 import { parseRatings, averageRating } from "@/lib/ratings";
+import { parseJsonBody } from "@/lib/validate";
+import { LibraryPostSchema, LibraryDeleteSchema } from "@/lib/schemas";
 
 export const GET = withUser(async (req: NextRequest, session) => {
     const { searchParams } = req.nextUrl;
@@ -112,16 +114,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
 //       discover/search item not yet persisted; it is created on the fly so it
 //       can be rated without first adding it to a wishlist.
 export const POST = withUser(async (req: NextRequest, session) => {
-    const body = await req.json() as {
-      mediaItemId?: string;
-      rating?: number | null;
-      status?: string | null;
-      type?: MediaType;
-      title?: string | null;
-      releaseDate?: string | null;
-      posterUrl?: string | null;
-      ids?: Record<string, any>;
-    };
+    const body = await parseJsonBody(req, LibraryPostSchema);
     const { rating, status } = body;
 
     // Resolve the media_item: use the given id, else create it from identity.
@@ -234,7 +227,7 @@ export const POST = withUser(async (req: NextRequest, session) => {
 // Remove an item from the library (clears status + rating). Used by the card
 // "watched" toggle when turning it off. Body: { mediaItemId }.
 export const DELETE = withUser(async (req: NextRequest, session) => {
-  const body = await req.json().catch(() => ({}));
+  const body = await parseJsonBody(req, LibraryDeleteSchema, { allowEmpty: true });
   // Prefer the explicit UUID; fall back to resolving it from source ids (a card
   // that never carried the local UUID). Nothing resolvable → nothing to remove.
   const mediaItemId: string | null = body.mediaItemId ?? resolveMediaItemFromIds(body.ids);

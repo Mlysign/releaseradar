@@ -3,11 +3,11 @@ import { withUser } from "@/lib/withUser";
 import { run, query } from "@/lib/db";
 import { createSession, setSessionCookie, bumpSessionEpoch } from "@/lib/session";
 import { Source } from "@/types";
+import { parseJsonBody } from "@/lib/validate";
+import { DisconnectPostSchema } from "@/lib/schemas";
 
 export const POST = withUser(async (req: NextRequest, session) => {
-  const { provider } = await req.json();
-
-  if (!provider) return NextResponse.json({ error: "provider required" }, { status: 400 });
+  const { provider } = await parseJsonBody(req, DisconnectPostSchema);
 
   // Must have at least one other identity remaining
   const allIdentities = query<{ id: string; provider: string; display_name: string | null }>(
