@@ -275,8 +275,15 @@ function SettingsContent() {
         <section className="space-y-3">
           <h2 className="text-lg font-semibold">Add login method</h2>
           <p className="text-sm text-neutral-500">Connect another account to log in with it in the future.</p>
+          {/*
+            <a>, not <Link>: these hand off to an OAuth endpoint and Link would
+            client-side navigate, breaking the redirect. The rule fires only
+            because P13's `/[type]/[id]/[slug]` makes 3-segment paths look like
+            pages to the linter; the static /api route still wins at runtime.
+          */}
           <div className="flex gap-3 flex-wrap">
             {!getIdentity("trakt") && (
+              // eslint-disable-next-line @next/next/no-html-link-for-pages
               <a href="/api/auth/trakt" className="text-sm px-4 py-2 rounded-lg transition-colors"
                 style={{ background: "#ed1c2415", border: "1px solid #ed1c2430", color: "#ed1c24" }}>
                 Connect Trakt
@@ -284,6 +291,7 @@ function SettingsContent() {
             )}
             {/* Letterboxd hidden until an API key is available — re-add when ready. */}
             {!getIdentity("steam") && (
+              // eslint-disable-next-line @next/next/no-html-link-for-pages
               <a href="/api/auth/steam" className="text-sm px-4 py-2 rounded-lg transition-colors"
                 style={{ background: "#1b9af715", border: "1px solid #1b9af730", color: "#1b9af7" }}>
                 Connect Steam

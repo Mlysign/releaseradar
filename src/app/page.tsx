@@ -45,7 +45,15 @@ export default function LoginPage() {
           <p className="text-neutral-400">Track your wishlists, discover what you&apos;ll love, and see what&apos;s coming — games, movies &amp; shows, all in one place.</p>
         </div>
 
+        {/*
+          These MUST stay <a>, not <Link>: they hand the browser off to an OAuth
+          endpoint, and Link would client-side navigate and break the redirect.
+          The rule only fires because P13's `/[type]/[id]/[slug]` route makes any
+          3-segment path (here /api/auth/trakt) look like a page to the linter —
+          at runtime the static /api route still wins. False positive.
+        */}
         <div className="space-y-3">
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/api/auth/trakt"
             className="flex items-center justify-center gap-3 w-full py-3 rounded-xl font-medium transition-all hover:opacity-90"
             style={{ background: "#ed1c2420", border: "1px solid #ed1c2444", color: "#ed1c24" }}>
@@ -53,6 +61,7 @@ export default function LoginPage() {
             Continue with Trakt.tv
           </a>
 
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
           <a href="/api/auth/steam"
             className="flex items-center justify-center gap-3 w-full py-3 rounded-xl font-medium transition-all hover:opacity-90"
             style={{ background: "#1b9af720", border: "1px solid #1b9af744", color: "#1b9af7" }}>
