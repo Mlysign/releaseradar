@@ -8,6 +8,7 @@ import { DEFAULT_COUNTRY } from "@/lib/countries";
 
 import { searchLetterboxdFilms, posterFromFilm } from "@/lib/sources/letterboxd";
 import { personalizedFeed, filterSectionPage } from "@/lib/liveDiscover";
+import { persistDiscoverItems } from "@/lib/discoverPersist";
 import { fetchGamePage, fetchMoviePage, fetchShowPage, Direction } from "@/lib/discoverFeed";
 import { searchIgdbGames, igdbImageUrl, igdbReleaseDate } from "@/lib/sources/igdb";
 import { normalizeName } from "@/lib/merge";
@@ -31,6 +32,7 @@ async function searchAll(q: string, type: string | null) {
           posterUrl: g.background_image ?? null,
           platforms: (g.platforms ?? []).slice(0, 3).map((p: any) => p.platform.name),
           ids: { rawg: g.id },
+          raw: { source: "rawg", sourceId: String(g.id), data: g },
         });
       }
     } catch { /* continue */ }
@@ -52,6 +54,7 @@ async function searchAll(q: string, type: string | null) {
           posterUrl: igdbImageUrl(g.cover?.image_id, "t_cover_big"),
           platforms: (g.platforms ?? []).slice(0, 3).map((p: any) => p?.name).filter(Boolean),
           ids: { igdb: g.id },
+          raw: { source: "igdb", sourceId: String(g.id), data: g },
         });
       }
     } catch { /* continue */ }
@@ -69,6 +72,7 @@ async function searchAll(q: string, type: string | null) {
           title: m.title, releaseDate: m.release_date ?? null,
           posterUrl: m.poster_path ? `https://image.tmdb.org/t/p/w342${m.poster_path}` : null,
           overview: m.overview, ids: { tmdb: m.id },
+          raw: { source: "tmdb", sourceId: String(m.id), data: m },
         });
       }
     } catch { /* continue */ }
@@ -86,6 +90,7 @@ async function searchAll(q: string, type: string | null) {
           title: s.name, releaseDate: s.first_air_date ?? null,
           posterUrl: s.poster_path ? `https://image.tmdb.org/t/p/w342${s.poster_path}` : null,
           overview: s.overview, ids: { tmdb: s.id },
+          raw: { source: "tmdb", sourceId: String(s.id), data: s },
         });
       }
     } catch { /* continue */ }
@@ -109,6 +114,7 @@ async function searchAll(q: string, type: string | null) {
             letterboxd: film.id,
             ...(tmdbLink ? { tmdb: parseInt(tmdbLink.id) } : {}),
           },
+          raw: { source: "letterboxd", sourceId: String(film.id), data: film },
         });
       }
     } catch { /* continue */ }
@@ -142,6 +148,22 @@ export async function GET(req: NextRequest) {
     } catch { /* continue unauthenticated */ }
     // Region for TMDB release-date filtering (T22): the user's country, else US.
     const region = userId ? getUserCountry(userId) : DEFAULT_COUNTRY;
+
+    // H2b — give every item a row (and so a uuid) BEFORE it reaches the client,
+    // then hand that uuid back as the item's `id`. This is what makes the item
+    // url uuid-only: a discover result used to ship a composite id
+    // (`tmdb-movie-693134`) that the url layer had to parse and resolve live.
+    //
+    // `raw` is the provider list payload used to write the row — it must be
+    // STRIPPED here, not serialized to the client. It exists for persistence
+    // only, and shipping it would undo a chunk of what H2a bought back.
+    const persist = (items: any[]) => {
+      const idMap = persistDiscoverItems(items);
+      return items.map(({ raw, ...it }) => {
+        const uuid = idMap.get(it.id);
+        return uuid ? { ...it, id: uuid } : it;
+      });
+    };
 
     // Attach canonical user-state (wishlist providers + watched/played + rating)
     // to a batch of live discover items, resolved against the local DB. DB-only
@@ -179,7 +201,7 @@ export async function GET(req: NextRequest) {
     // ── Search ────────────────────────────────────────────────────
     if (q && q.length >= 2) {
       const results = await searchAll(q, type ?? null);
-      return NextResponse.json({ items: annotate(sortByDate(results)) });
+      return NextResponse.json({ items: annotate(persist(sortByDate(results))) });
     }
 
     // ── Load-more for a single section (pagination, either direction) ───
@@ -193,7 +215,7 @@ export async function GET(req: NextRequest) {
       if (section === "movies") results = await fetchMoviePage(page, direction, region);
       if (section === "shows")  results = await fetchShowPage(page, direction);
       if (userId) results = filterSectionPage(userId, results);
-      return NextResponse.json({ items: annotate(results), section });
+      return NextResponse.json({ items: annotate(persist(results)), section });
     }
 
     // ── Default browse ──
@@ -203,7 +225,7 @@ export async function GET(req: NextRequest) {
     // popularity — the original behavior.
     const personalized = userId ? await personalizedFeed(userId, region) : null;
     if (personalized) {
-      return NextResponse.json({ items: annotate(sortByDate(personalized)) });
+      return NextResponse.json({ items: annotate(persist(sortByDate(personalized))) });
     }
 
     const [games, movies, shows] = await Promise.all([
@@ -212,7 +234,7 @@ export async function GET(req: NextRequest) {
       fetchShowPage(1, "future"),
     ]);
     const all = sortByDate([...games, ...movies, ...shows]);
-    return NextResponse.json({ items: annotate(all) });
+    return NextResponse.json({ items: annotate(persist(all)) });
 
   } catch (e: any) {
     log.error("discover_error", { ...errorFields(e) });

@@ -7,7 +7,7 @@
 // Shared by `api/discover/route.ts` (cold-start + section pagination) and
 // `liveDiscover.ts` (wide multi-page pull → re-rank).
 
-import { MediaType } from "@/types";
+import { MediaType, Source } from "@/types";
 import { httpFetch } from "@/lib/http";
 import { tmdbGenreNames } from "@/lib/tmdbGenres";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
@@ -34,6 +34,19 @@ export function dateWindow(direction: Direction): { gte: string; lte: string } {
 // A live discover item, enriched with scoring inputs. The first block matches
 // what the client already consumes; the trailing block is feed-internal and
 // harmless if it reaches the client.
+// H2b — the provider payload a candidate was built from, tagged with the source
+// it actually CAME FROM. That tag is not redundant with `FeedCandidate.source`:
+// a Trakt "anticipated" entry is labelled `source: "tmdb"` (it's keyed by its
+// TMDB id so it dedupes against the TMDB pool), but the payload in hand is
+// Trakt-shaped. Storing it as TMDB would run it through the TMDB projector and
+// normalizer — wrong fields, no cross-ids, a corrupt link. So the payload says
+// what it is, and `source`/`ids` stay the feed's business.
+export interface RawPayload {
+  source: Source;
+  sourceId: string;
+  data: any;
+}
+
 export interface FeedCandidate {
   id: string;
   rawId: number;
@@ -45,6 +58,8 @@ export interface FeedCandidate {
   platforms?: string[];
   overview?: string;
   ids: Record<string, number>;
+  /** The list payload to persist (H2b). Null when we hold none worth storing. */
+  raw?: RawPayload | null;
   // ── scoring inputs (used by liveDiscover, ignored by the client) ──
   genreNames: string[];          // genre/tag names for the cheap pre-score
   originalLanguage: string | null;
@@ -68,6 +83,7 @@ export async function fetchGamePage(page = 1, direction: Direction = "future"): 
     posterUrl: g.background_image ?? null,
     platforms: (g.platforms ?? []).slice(0, 3).map((p: any) => p.platform.name),
     ids: { rawg: g.id },
+    raw: { source: "rawg", sourceId: String(g.id), data: g },
     genreNames: [
       ...(g.genres ?? []).map((x: any) => x?.name),
       ...(g.tags ?? []).slice(0, 8).map((x: any) => x?.name),
@@ -94,6 +110,7 @@ export async function fetchMoviePage(page = 1, direction: Direction = "future", 
     title: m.title, releaseDate: m.release_date ?? null,
     posterUrl: m.poster_path ? `https://image.tmdb.org/t/p/w342${m.poster_path}` : null,
     overview: m.overview, ids: { tmdb: m.id },
+    raw: { source: "tmdb", sourceId: String(m.id), data: m },
     genreNames: tmdbGenreNames(m.genre_ids, "movie"),
     originalLanguage: m.original_language ?? null,
     voteCount: m.vote_count ?? 0,
@@ -115,6 +132,7 @@ export async function fetchShowPage(page = 1, direction: Direction = "future"): 
     title: s.name, releaseDate: s.first_air_date ?? null,
     posterUrl: s.poster_path ? `https://image.tmdb.org/t/p/w342${s.poster_path}` : null,
     overview: s.overview, ids: { tmdb: s.id },
+    raw: { source: "tmdb", sourceId: String(s.id), data: s },
     genreNames: tmdbGenreNames(s.genre_ids, "show"),
     originalLanguage: s.original_language ?? null,
     voteCount: s.vote_count ?? 0,
@@ -143,6 +161,7 @@ export async function fetchIgdbGamePage(page = 1, direction: Direction = "future
       igdbImageUrl(g.screenshots?.[0]?.image_id, "t_720p"),
     platforms: (g.platforms ?? []).slice(0, 3).map((p: any) => p?.name).filter(Boolean),
     ids: { igdb: g.id },
+    raw: { source: "igdb", sourceId: String(g.id), data: g },
     genreNames: [
       ...(g.genres ?? []).map((x: any) => x?.name),
       ...(g.themes ?? []).map((x: any) => x?.name),
@@ -168,6 +187,10 @@ function traktToCandidate(entry: any, type: MediaType, win: { gte: string; lte: 
     title: m.title, releaseDate,
     posterUrl: null, // filled by TMDB hydration
     overview: m.overview, ids: { tmdb: tmdbId, ...(m.ids?.trakt ? { trakt: m.ids.trakt } : {}) },
+    // The payload is TRAKT's, even though the candidate is keyed by its tmdb id
+    // (see RawPayload). Its `ids.tmdb` still reaches media_external_ids via
+    // extractCrossIds, so the item stays matchable against the TMDB pool.
+    raw: m.ids?.trakt != null ? { source: "trakt", sourceId: String(m.ids.trakt), data: m } : null,
     genreNames: (m.genres ?? []).filter((g: any): g is string => typeof g === "string"),
     originalLanguage: m.language ?? null,
     voteCount: m.votes ?? 0,

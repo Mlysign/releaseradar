@@ -20,7 +20,7 @@ import { extractFacets, tagKey, Facet } from "@/lib/facets";
 import { mergeLinks, normalizeName, extractYear } from "@/lib/merge";
 import { METADATA } from "@/lib/metadata/registry";
 import {
-  FeedCandidate, fetchGamePage, fetchMoviePage, fetchShowPage, fetchPages,
+  FeedCandidate, RawPayload, fetchGamePage, fetchMoviePage, fetchShowPage, fetchPages,
   fetchIgdbGamePage, fetchTraktMoviePage, fetchTraktShowPage,
 } from "@/lib/discoverFeed";
 import { MediaLink, MediaType } from "@/types";
@@ -230,6 +230,7 @@ export interface PersonalizedItem {
   id: string; rawId: number; source: string; type: MediaType;
   title: string; releaseDate: string | null; posterUrl: string | null;
   platforms?: string[]; overview?: string; ids: Record<string, number>;
+  raw?: RawPayload | null;   // carried through for H2b persistence, not for the client
   score: number; reasons: Reason[];
 }
 
@@ -277,7 +278,7 @@ export async function personalizedFeed(userId: string, region: string): Promise<
   const items: PersonalizedItem[] = [...selGames, ...selMovies, ...selShows].map(({ c, score, reasons }) => ({
     id: c.id, rawId: c.rawId, source: c.source, type: c.type,
     title: c.title, releaseDate: c.releaseDate, posterUrl: c.posterUrl,
-    platforms: c.platforms, overview: c.overview, ids: c.ids,
+    platforms: c.platforms, overview: c.overview, ids: c.ids, raw: c.raw,
     score, reasons,
   }));
 

@@ -81,11 +81,16 @@ function ensureSchema(db: Database.Database) {
       norm_title TEXT,                -- normalized title for fast matching
       release_date TEXT,              -- merged date (priority order)
       poster_url TEXT,                -- best poster URL
+      -- H2b provenance: 0 = library / ingested / synced (the catalog pool),
+      -- 1 = only ever seen in a /discover feed. The catalog surfaces and the IDF
+      -- weights read the pool only; see migration 8 and discovery.ts.
+      browsed INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL DEFAULT (strftime('%s','now')),
       updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
     );
     CREATE INDEX IF NOT EXISTS idx_media_type ON media_items(type);
     CREATE INDEX IF NOT EXISTS idx_media_release ON media_items(release_date);
+    CREATE INDEX IF NOT EXISTS idx_media_items_browsed ON media_items(browsed);
 
     -- Raw data per source, linked to canonical item
     CREATE TABLE IF NOT EXISTS media_links (

@@ -212,6 +212,36 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 8,
+    name: "media_items.browsed (H2b discover-persists provenance)",
+    up: (db) => {
+      // H2b — /discover now writes a media_items row for every item it returns,
+      // so media_items stops being "the library" and becomes "library + ingested
+      // pool + everything anyone browsed".
+      //
+      // The catalog surfaces (find / Best-match, Insights, searchTitles) and the
+      // IDF weights read media_items and MUST NOT see the browsed tail: they'd
+      // list titles the user never added and dilute facet rarity with whatever
+      // happened to be popular this week.
+      //
+      // Membership (user_item_state) is the obvious filter and it is WRONG:
+      // recommendIngest deliberately persists unowned titles "so the recommender
+      // has a real pool to rank — not just the watchlist". Filtering on
+      // membership would silently empty that pool. So the discriminator is
+      // provenance — how the row got here — not who owns it.
+      //
+      // 0 = library / ingested / synced (the catalog pool). 1 = browsed only.
+      // Every row that exists NOW predates discover-persist, so the DEFAULT 0
+      // backfills them correctly with no data pass.
+      const cols = db.prepare("PRAGMA table_info(media_items)").all() as { name: string }[];
+      if (!cols.some((c) => c.name === "browsed")) {
+        db.exec("ALTER TABLE media_items ADD COLUMN browsed INTEGER NOT NULL DEFAULT 0");
+      }
+      // The pool query filters on this on every cache rebuild.
+      db.exec("CREATE INDEX IF NOT EXISTS idx_media_items_browsed ON media_items(browsed)");
+    },
+  },
 ];
 
 // Apply all pending migrations (version > current user_version), each in its own

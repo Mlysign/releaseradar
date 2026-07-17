@@ -86,8 +86,32 @@ export interface FindRequest {
 const CANDIDATE_TTL_MS = 5 * 60 * 1000;
 let _cache: { sig: string; at: number; vectors: DiscoveryVector[]; byId: Map<string, DiscoveryVector>; vocab: VocabEntry[]; idf: Map<string, number> } | null = null;
 
+// ── The catalog POOL (H2b) ───────────────────────────────────────────────────
+//
+// Since H2b, media_items is no longer "the library": /discover writes a row for
+// every item it returns, so the table is library + recommendIngest's pool +
+// everything anyone has browsed past. Everything in this module — the Best-match
+// candidate set, Insights, searchTitles, and the IDF weights — means the first
+// two and NOT the third. A browsed row is a url target, not a catalog entry.
+//
+// So the pool is: anything not marked `browsed` (library, synced, ingested),
+// UNION anything any user has acted on. The union is what makes promotion
+// automatic — wishlist a browsed title and it joins the pool on the next rebuild,
+// with no flag to flip and no way for the two to disagree.
+//
+// NOT filtered on membership alone: recommendIngest deliberately persists unowned
+// titles so the recommender has a real pool to rank, and those must stay.
+const POOL_WHERE = `(mi.browsed = 0 OR mi.id IN (SELECT media_item_id FROM user_item_state))`;
+
+// The signature must be scoped to the pool too, not just the cache it guards.
+// A count over ALL of media_items would change on every /discover browse, so
+// every browse would invalidate the cache and force a full rebuild — which
+// parses the raw_data of the entire catalog, on the request path, for a table
+// the browse didn't meaningfully change.
 function catalogSignature(): string {
-  const r = get<{ n: number; mx: number }>(`SELECT COUNT(*) n, COALESCE(MAX(updated_at),0) mx FROM media_items`);
+  const r = get<{ n: number; mx: number }>(
+    `SELECT COUNT(*) n, COALESCE(MAX(mi.updated_at),0) mx FROM media_items mi WHERE ${POOL_WHERE}`
+  );
   return `${r?.n ?? 0}:${r?.mx ?? 0}`;
 }
 
@@ -101,7 +125,8 @@ function buildCache() {
     `SELECT mi.id, mi.type, mi.title, mi.release_date, mi.poster_url, mi.created_at,
             ml.source, ml.source_id, ml.raw_data, ml.release_date as link_release_date
      FROM media_items mi
-     LEFT JOIN media_links ml ON ml.media_item_id = mi.id`
+     LEFT JOIN media_links ml ON ml.media_item_id = mi.id
+     WHERE ${POOL_WHERE}`
   );
 
   const groups = new Map<string, { row: VecRow; links: MediaLink[] }>();

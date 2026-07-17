@@ -1,5 +1,6 @@
 import { query, get } from "@/lib/db";
 import { PROJECTION_VERSION } from "@/lib/sources/project";
+import { linkSourceToItem } from "@/lib/matcher";
 import { extractYear } from "@/lib/merge";
 import { MediaLink, EnrichedItem, Source, MediaType } from "@/types";
 import { fetchOmdbScores, fetchOmdbByImdbId, OmdbResult } from "@/lib/sources/omdb";
@@ -137,10 +138,33 @@ export async function ensureTmdbDetail(links: MediaLink[], type: MediaType): Pro
     const fresh = await METADATA.tmdb?.fetchById?.(tmdb.sourceId, type);
     if (fresh) {
       tmdb.rawData = fresh.rawData;
+      storeRefreshed(tmdb, type, fresh);
       return true;
     }
   } catch { /* keep stored data */ }
   return false;
+}
+
+// Persist a blob we just refetched because the stored one was stale, so the row
+// heals ONCE instead of refetching on every read.
+//
+// H2b makes this load-bearing. Discover now writes a `thin` list-payload row per
+// browsed item, stamped version 0 = "refetch on first detail read". Without a
+// write-back that stamp never advances, so every view of every browsed item
+// would hit TMDB again, forever — the refresh above was in-memory only, which
+// was survivable when the only stale rows were a handful of pre-H2a leftovers
+// and is not survivable once the catalog grows with everything anyone browses.
+//
+// Guarded on a uuid `mediaItemId`: the live paths (buildLiveLinks) put a SOURCE
+// id there for an item with no row, and those must stay unstored.
+function storeRefreshed(link: MediaLink, type: MediaType, fresh: MetaLink): void {
+  if (!UUID_RE.test(link.mediaItemId) || !fresh.title) return;
+  try {
+    linkSourceToItem(link.mediaItemId, {
+      source: link.source, sourceId: link.sourceId, type,
+      title: fresh.title, releaseDate: fresh.releaseDate ?? link.releaseDate, rawData: fresh.rawData,
+    });
+  } catch { /* a failed heal just means we refetch next time — never break the read */ }
 }
 
 // Refresh stored game links (igdb/rawg) in-memory when they predate the current
@@ -160,7 +184,7 @@ export async function ensureGameDetail(links: MediaLink[], type: MediaType): Pro
   for (const { link, provider } of stale) {
     try {
       const fresh = await METADATA[provider]?.fetchById?.(link.sourceId, type);
-      if (fresh) { link.rawData = fresh.rawData; refreshed = true; }
+      if (fresh) { link.rawData = fresh.rawData; storeRefreshed(link, type, fresh); refreshed = true; }
     } catch { /* keep stored data */ }
   }
   return refreshed;

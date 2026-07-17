@@ -12,6 +12,23 @@ interface SourceItem {
   title: string;
   releaseDate: string | null;
   rawData: any;
+  /**
+   * H2b — this payload came from a provider LIST endpoint (a /discover browse or
+   * search result), not a detail fetch. Two consequences, both load-bearing:
+   *
+   *  1. It is stamped `projection_version = 0`, NOT PROJECTION_VERSION. The stamp
+   *     means "the shape this row was written in", and a list payload is not the
+   *     projected-detail shape — it has no cast, keywords, trailers or watch
+   *     providers. Stamping it current would make `ensureTmdbDetail` read it as
+   *     fresh and skip the detail fetch, so every browsed item's page would
+   *     render permanently from ~1KB of list data. Version 0 = "refetch on first
+   *     detail read", which is the staleness path that already exists.
+   *  2. It NEVER overwrites an existing link. A thin write is insert-only: if the
+   *     link is already stored (possibly with a full detail blob), we return its
+   *     media_item_id and touch nothing. Otherwise a browse pass over a title the
+   *     user already owns would shallow-merge list junk over the real payload.
+   */
+  thin?: boolean;
 }
 
 // Preserve detail-only fields when a sparser payload re-syncs over a richer one
@@ -37,6 +54,8 @@ export function upsertMediaItem(item: SourceItem): string {
       [item.source, item.sourceId]
     );
     if (existing) {
+      // A thin (list-payload) write never degrades a stored link — see SourceItem.thin.
+      if (item.thin) return existing.media_item_id;
       run(
         "UPDATE media_links SET raw_data = ?, title = ?, release_date = ?, last_synced = strftime('%s','now'), projection_version = ? WHERE source = ? AND source_id = ?",
         // H2a: project AFTER merging, so the merge still sees the stored blob
@@ -54,27 +73,40 @@ export function upsertMediaItem(item: SourceItem): string {
       run(
         `INSERT INTO media_links (id, media_item_id, source, source_id, title, release_date, raw_data, projection_version)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [randomUUID(), mediaItemId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), PROJECTION_VERSION]
+        [randomUUID(), mediaItemId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), linkVersion(item)]
       );
       remergeItem(mediaItemId);
       return mediaItemId;
     }
 
-    // 3. Create a new canonical item
+    // 3. Create a new canonical item.
+    //
+    // `browsed` (H2b) is set ONLY here, on creation, and only for a thin write —
+    // an item nobody has done anything with but see it go by in a /discover feed.
+    // Cases 1 and 2 above don't reach this, so a title that's already in the pool
+    // can never be demoted to browsed by someone browsing past it. Promotion the
+    // other way needs no code: the pool query unions in everything in
+    // user_item_state, so wishlisting a browsed item pulls it in immediately.
     const newId = randomUUID();
     run(
-      `INSERT INTO media_items (id, type, title, norm_title, release_date, poster_url)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [newId, item.type, item.title, normalizeName(item.title), item.releaseDate, null]
+      `INSERT INTO media_items (id, type, title, norm_title, release_date, poster_url, browsed)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [newId, item.type, item.title, normalizeName(item.title), item.releaseDate, null, item.thin ? 1 : 0]
     );
     run(
       `INSERT INTO media_links (id, media_item_id, source, source_id, title, release_date, raw_data, projection_version)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [randomUUID(), newId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), PROJECTION_VERSION]
+      [randomUUID(), newId, item.source, item.sourceId, item.title, item.releaseDate, JSON.stringify(projectRawData(item.source, item.rawData)), linkVersion(item)]
     );
     remergeItem(newId);
     return newId;
   });
+}
+
+// The projection stamp to store for a new link: current for a detail payload,
+// 0 for a list payload so the first detail read refetches it. See SourceItem.thin.
+function linkVersion(item: SourceItem): number {
+  return item.thin ? 0 : PROJECTION_VERSION;
 }
 
 // Cross-reference ids this source item carries (used to tell apart two distinct
