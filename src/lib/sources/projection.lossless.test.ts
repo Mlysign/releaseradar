@@ -63,15 +63,11 @@ describe.skipIf(!hasDb)("H2a projection is lossless w.r.t. normalize()", () => {
         : v;
 
     const failures: string[] = [];
-    let before = 0;
-    let after = 0;
 
     for (const r of rows) {
       let raw: any;
       try { raw = JSON.parse(r.raw_data); } catch { continue; }
       const projected = projectRawData(r.source as Source, raw);
-      before += r.raw_data.length;
-      after += JSON.stringify(projected).length;
 
       const a = normalizeSource(r.source as Source, raw, r.type as MediaType) as any;
       const b = normalizeSource(r.source as Source, projected, r.type as MediaType) as any;
@@ -84,8 +80,16 @@ describe.skipIf(!hasDb)("H2a projection is lossless w.r.t. normalize()", () => {
       }
     }
 
-    // The projection must pay for itself: it exists to shrink the catalog.
-    expect(1 - after / before).toBeGreaterThan(0.5);
+    // NOTE: this used to also assert the projection shrinks the catalog >50%.
+    // That was a one-time H2a MEASUREMENT against a pre-projection database, not
+    // an invariant — and it stopped being true the moment the local db was itself
+    // migrated (projecting an already-projected blob is correctly a no-op, so the
+    // "shrink" is 0% and the assertion failed forever after). The size result is
+    // recorded in TASKS.md/H2a; the shrink is re-measured against an unmigrated
+    // snapshot by migration7.dryrun.test.ts, where it actually means something.
+    //
+    // What's left IS the invariant, and it's the part that guards future edits:
+    // projecting must not change what normalize() sees.
     expect(failures.length, `losses:\n${failures.slice(0, 10).join("\n")}`).toBeLessThanOrEqual(ACCEPTED_MISMATCHES);
   });
 });

@@ -18,10 +18,22 @@ let _initialized = false;
 
 export function getDb(): Database.Database {
   if (_db) return _db;
-  _db = new Database(DB_PATH);
-  _db.pragma("journal_mode = WAL");
-  _db.pragma("foreign_keys = ON");
-  ensureSchema(_db);
+  const db = new Database(DB_PATH);
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+  // Only cache a connection whose schema setup SUCCEEDED. This used to assign
+  // _db before calling ensureSchema, so a throw in there left a usable but
+  // UNMIGRATED connection cached forever: the first request 500s, every request
+  // after it returns the cached handle and skips ensureSchema entirely — the app
+  // then runs indefinitely against an old schema, failing one write at a time
+  // instead of failing to boot. A migration that can't apply must be loud.
+  try {
+    ensureSchema(db);
+  } catch (e) {
+    db.close();
+    throw e;
+  }
+  _db = db;
   return _db;
 }
 
@@ -90,7 +102,13 @@ function ensureSchema(db: Database.Database) {
     );
     CREATE INDEX IF NOT EXISTS idx_media_type ON media_items(type);
     CREATE INDEX IF NOT EXISTS idx_media_release ON media_items(release_date);
-    CREATE INDEX IF NOT EXISTS idx_media_items_browsed ON media_items(browsed);
+    -- NOTE: no index on browsed here, deliberately. This block runs BEFORE
+    -- runMigrations, so it only ever sees the columns an EXISTING db already has.
+    -- browsed is added by migration 8, so indexing it here throws
+    -- "no such column: browsed" on every pre-migration-8 database, which aborts
+    -- ensureSchema before the very migrations it was about to run. Migration 8
+    -- owns that index. Same rule for any future column: CREATE TABLE describes a
+    -- FRESH db; the indexes here must also hold for an OLD one.
 
     -- Raw data per source, linked to canonical item
     CREATE TABLE IF NOT EXISTS media_links (

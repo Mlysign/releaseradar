@@ -27,10 +27,39 @@ const SOURCE = "data/rr.db";
 const COPY = `${process.env.TEMP ?? "/tmp"}/mig-dryrun.db`;
 const hasDb = fs.existsSync(SOURCE);
 
+// Snapshot the source the way the project's procedure says to ("build a clean
+// test copy via VACUUM INTO"), NOT with copyFileSync.
+//
+// This harness used to copyFileSync, which is wrong for a WAL database: it copies
+// the main file only, so every commit still sitting in the -wal is missing from
+// the copy. It silently under-reported — the m8 case below "passed" against a
+// snapshot that predated 57 rows the running dev server had just written.
+// VACUUM INTO reads through a proper read transaction, so the copy is the real
+// committed state.
+function snapshot(): Database.Database {
+  fs.rmSync(COPY, { force: true });
+  const src = new Database(SOURCE, { readonly: true });
+  src.exec(`VACUUM INTO '${COPY.replace(/\\/g, "/")}'`);
+  src.close();
+  return new Database(COPY);
+}
+
+// The source's schema version decides which checks are meaningful. Once the local
+// db has itself been migrated (which is the normal steady state after running the
+// app), "does migration 7 shrink it" can never be true again.
+const sourceVersion = (): number => {
+  const d = new Database(SOURCE, { readonly: true });
+  const v = d.pragma("user_version", { simple: true }) as number;
+  d.close();
+  return v;
+};
+
 describe.skipIf(!hasDb)("migrations on a live-DB copy", () => {
-  it("m7: shrinks raw_data, stamps every row, and needs no network", () => {
-    fs.copyFileSync(SOURCE, COPY); // fresh, unmigrated copy every run
-    const db = new Database(COPY);
+  // Skips against an already-projected source: re-projecting is a no-op by
+  // design, so there'd be nothing to measure. Run it against a pre-H2a snapshot
+  // (e.g. a .bak) to reproduce the number.
+  it.skipIf(hasDb && sourceVersion() >= 7)("m7: shrinks raw_data, stamps every row, and needs no network", () => {
+    const db = snapshot();
     const before = db.prepare("SELECT SUM(LENGTH(raw_data)) b, COUNT(*) c FROM media_links").get() as { b: number; c: number };
 
     const applied = runMigrations(db as any);
@@ -65,21 +94,28 @@ describe.skipIf(!hasDb)("migrations on a live-DB copy", () => {
   // when it runs predates discover-persist and is therefore pool (browsed = 0).
   // If the DEFAULT were ever wrong, the whole live catalog would silently vanish
   // from Best-match/Insights — a total, quiet loss of the catalog surfaces.
-  it("m8: backfills the whole existing catalog into the pool (browsed = 0)", () => {
-    fs.copyFileSync(SOURCE, COPY);
-    const db = new Database(COPY);
+  it("m8: adds the column and leaves the catalog intact", () => {
+    const db = snapshot();
     const total = (db.prepare("SELECT COUNT(*) c FROM media_items").get() as { c: number }).c;
+    const preMigration = (db.pragma("user_version", { simple: true }) as number) < 8;
 
     runMigrations(db as any);
 
     expect(db.pragma("user_version", { simple: true })).toBe(8);
     const cols = db.prepare("PRAGMA table_info(media_items)").all() as { name: string }[];
     expect(cols.some((c) => c.name === "browsed")).toBe(true);
-
-    // Not one pre-existing item may land outside the pool.
-    const browsed = (db.prepare("SELECT COUNT(*) c FROM media_items WHERE browsed <> 0").get() as { c: number }).c;
-    expect(browsed).toBe(0);
+    // The migration must not add or drop items.
     expect((db.prepare("SELECT COUNT(*) c FROM media_items").get() as { c: number }).c).toBe(total);
+
+    // The backfill claim, and the only one that can silently destroy the catalog
+    // surfaces: everything that existed BEFORE migration 8 predates
+    // discover-persist and must land in the pool. Only checkable on a source that
+    // hasn't been migrated yet — afterwards, `browsed = 1` rows are legitimately
+    // present (real browsed items), and asserting zero would just be wrong.
+    if (preMigration) {
+      const browsed = (db.prepare("SELECT COUNT(*) c FROM media_items WHERE browsed <> 0").get() as { c: number }).c;
+      expect(browsed).toBe(0);
+    }
 
     // Idempotent: re-running is a no-op, not a second ALTER (which would throw).
     expect(runMigrations(db as any)).toEqual([]);
