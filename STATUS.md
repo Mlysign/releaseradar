@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · High-level roadmap. **Full detail + completion history live in [TASKS.md](TASKS.md).**
 
-**👉 Currently: P13b — flip `PUBLIC_ITEMS_INDEXABLE` to index the whole library** (decided; just needs executing). Everything else below is either waiting on you (Android TWA) or not yet scoped (H1/H3/H4).
+**👉 Currently: P13b — flip `PUBLIC_ITEMS_INDEXABLE` to index the whole library** (decided; just needs executing). Everything else below is either waiting on you (Android TWA, H3.0/H3.1) or not yet scoped (H1). H3 + H4 are now scoped — see TASKS.md.
 
 ---
 
@@ -30,9 +30,9 @@ Fandex is live at **https://fandex.org** and ready to share — hosted on Railwa
 | **Post-launch (future):** | |
 | UI/UX overhaul — mobile-first polish (H1) | 🔭 planned |
 | Data-model hardening (H2) | ✅ **done** |
-| Monetization strategy (H3) | 🔭 planned |
-| Legal & compliance — imprint, privacy, cookies, account deletion, support (H4) | 🔭 planned · gate before public/EU |
-| Fandex Recommendation Algorithm (manually added by nils) | 🔭 planned (FYI, Claude) |
+| Monetization strategy (H3) | 🟢 **scoped, v1 launch = donations + affiliate only** (2026-07-18): ads + one-time unlock + freemium **deferred to Path B** (H3.8 user threshold); on free TMDB/Trakt tiers meanwhile (risk accepted) · ⚠️ makes H4.0/H4.2 (Impressum) critical path even at this reduced scope |
+| Legal & compliance — privacy, cookies, account deletion, support (H4) | 🟢 **scoped** (2026-07-18, ~110k now) · legal links via /profile footer · **Impressum + address deferred to H3 gate** pending your legal advice (H4.0) |
+| Fandex Score — visible per-item taste match (H5) | 🔵 **H5.1 done** (2026-07-18, config core: `scoring_config`/`tag_category` tables, migration 9) — design in [docs/fandex-score.md](docs/fandex-score.md), H5.2–H5.5 remain in TASKS.md |
 
 ---
 _✅ done · 🔵 in progress / needs input · 🟢 later · 🔭 future / not yet scoped · 🔒 security · 🔧 config_

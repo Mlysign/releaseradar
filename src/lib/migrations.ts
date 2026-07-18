@@ -29,6 +29,7 @@
 
 import type DatabaseT from "better-sqlite3";
 import { projectRawData, PROJECTION_VERSION } from "@/lib/sources/project";
+import { DEFAULT_SCORING_CONFIG, DEFAULT_TAG_CATEGORIES } from "@/lib/scoringDefaults";
 import type { Source } from "@/types";
 type DB = DatabaseT.Database;
 
@@ -251,6 +252,63 @@ export const MIGRATIONS: Migration[] = [
       }
       // The pool query filters on this on every cache rebuild.
       db.exec("CREATE INDEX IF NOT EXISTS idx_media_items_browsed ON media_items(browsed)");
+    },
+  },
+  {
+    version: 9,
+    name: "scoring_config + tag_category + tag_category_override (H5.1)",
+    up: (db) => {
+      // Fandex Score config core (docs/fandex-score.md §6). All three tables
+      // are brand new, so — unlike migrations 5-8 — there is no pre-existing
+      // column to guard: CREATE TABLE + its indexes can live together here,
+      // same as migration 2 (media_external_ids).
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS scoring_config (
+          id INTEGER PRIMARY KEY CHECK (id = 1),  -- single-row config blob
+          config TEXT NOT NULL,                   -- JSON: ScoringConfigValues
+          version INTEGER NOT NULL DEFAULT 1,
+          updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS tag_category (
+          id TEXT PRIMARY KEY,           -- e.g. genre, setting, or a custom slug
+          label TEXT NOT NULL,
+          color TEXT NOT NULL,
+          weight REAL NOT NULL DEFAULT 1,
+          ignored INTEGER NOT NULL DEFAULT 0,      -- excluded from the score entirely
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+
+        -- tag_key → category_id: backend reassignment wins over the code
+        -- heuristic (categorizeTag() in tags.ts). D6: one shared taxonomy,
+        -- used by both scoring and Insights.
+        CREATE TABLE IF NOT EXISTS tag_category_override (
+          tag_key TEXT PRIMARY KEY,
+          category_id TEXT NOT NULL REFERENCES tag_category(id) ON DELETE CASCADE,
+          updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_tag_override_category ON tag_category_override(category_id);
+      `);
+
+      // Seed scoring_config with the values that mirror current live behavior
+      // (discovery.ts's ROLE_WEIGHT + K_SHRINK) — this migration changes no
+      // scoring output, only makes the numbers backend-editable later (H5.2+).
+      db.prepare(
+        `INSERT OR IGNORE INTO scoring_config (id, config, version) VALUES (1, ?, 1)`
+      ).run(JSON.stringify(DEFAULT_SCORING_CONFIG));
+
+      // Seed tag_category from tags.ts's CATEGORIES so the backend starts as a
+      // faithful mirror of the hardcoded taxonomy — nothing regresses.
+      const insertCat = db.prepare(
+        `INSERT OR IGNORE INTO tag_category (id, label, color, weight, ignored, sort_order) VALUES (?, ?, ?, ?, ?, ?)`
+      );
+      for (const c of DEFAULT_TAG_CATEGORIES) {
+        insertCat.run(c.id, c.label, c.color, c.weight, c.ignored ? 1 : 0, c.sortOrder);
+      }
+      // tag_category_override starts empty: no reassignments yet, so
+      // categorizeTag()'s existing heuristics are the only source until the
+      // taxonomy editor (H5.4) writes overrides here.
     },
   },
 ];
