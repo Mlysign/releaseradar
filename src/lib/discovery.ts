@@ -12,10 +12,14 @@ import { representativeCommunity, averageCommunity } from "@/lib/ratings";
 import { getUserStateMap } from "@/lib/userState";
 import { extractFacets, Facet, facetId, FacetRole, personKey, companyKey } from "@/lib/facets";
 import { getLibraryFacetAnalysis, librarySignature } from "@/lib/libraryAnalysis";
+import { getScoringConfig, getTagCategories } from "@/lib/scoringConfig";
 import { MediaLink, MediaType } from "@/types";
 
 // ── Tunables ───────────────────────────────────────────────────────
-const K_SHRINK = 5;          // confidence: weight *= count/(count+K) — damps niche single samples
+// K_SHRINK (the old raw·count/(count+K) confidence shrink) is gone from HERE —
+// buildProfile() now reads its Bayesian equivalent (priorStrength, C) from
+// scoringConfig.ts (H5.2). ROLE_WEIGHT stays: liveDiscover.ts's membership-prior
+// scoring (a different, non-Fandex-Score signal) still reads it directly.
 const TOP_K_FACETS = 8;      // only an item's strongest matches score it (anti facet-dense)
 const SEED_BOOST = 1.25;     // example title you like → amplify its (positive) facets
 const SEED_PENALTY = 1.25;   // example title you dislike → amplify its (negative) facets
@@ -45,7 +49,11 @@ export interface DiscoveryVector {
 
 export interface VocabEntry { kind: string; role?: FacetRole; key: string; label: string; count: number }
 
-export interface Reason { kind: string; role?: FacetRole; label: string; category?: string; contribution: number }
+// H5.2 §3.4: BA/n (the facet's Bayesian average + rated-item count) are
+// populated by computeFandexScore's reasons so the expanded "why" view can
+// read e.g. "Director — 8.9 avg over 4 titles". Optional: scoreFacets'
+// (unchanged, idf-weighted Discover-ranking) reasons don't carry them.
+export interface Reason { kind: string; role?: FacetRole; label: string; category?: string; contribution: number; BA?: number; n?: number }
 
 export interface MembershipFilter { library?: "include" | "exclude" | "only"; wishlist?: "include" | "exclude" | "only" }
 
@@ -196,9 +204,14 @@ export function invalidateDiscoveryCache() { _cache = null; }
 export function getCatalogIdf(): Map<string, number> { return getCache().idf; }
 
 // ── Preference profile ────────────────────────────────────────────
+// meta's classWeight/BA/n are set for every real (rated-library) facet — H5.2
+// adds them for computeFandexScore's aggregate + explainability. Facets
+// injected by applyRefinements (seeds/manual pills) have no library stats
+// behind them, so those three stay undefined; computeFandexScore treats a
+// facet with no classWeight as unscored (see its `meta?.classWeight` guard).
 export interface Profile {
   w: Map<string, number>;
-  meta: Map<string, { kind: string; role?: FacetRole; key: string; label: string; category?: string }>;
+  meta: Map<string, { kind: string; role?: FacetRole; key: string; label: string; category?: string; classWeight?: number; BA?: number; n?: number }>;
   baseline: number;
   hasSignal: boolean;
 }
@@ -207,21 +220,46 @@ export interface Profile {
 // without bound (single-instance, P2).
 const _profileCache = new BoundedCache<string, { sig: string; profile: Profile }>({ max: 500 });
 
+// H5.2: the Bayesian shrinkage average (§3.1) — replaces the old
+// `raw · count/(count+K)` shortcut with a textbook Bayesian average, shrunk
+// toward the user's OWN rating baseline (D4) rather than a global one. This is
+// what makes a facet seen once get pulled most of the way back to baseline
+// until real evidence accumulates, and what makes dislikes (dev_f < 0) emerge
+// with no special-casing.
+//
+// Weight class (§3.2): tags read their category's weight from tag_category and
+// are DROPPED entirely (not just zero-weighted) when that category is
+// ignored — meta/noise today, platform tags once someone buckets them via the
+// taxonomy editor (H5.4). People/company roles keep reading roleWeights
+// (still the ROLE_WEIGHT literal's values, now DB-backed via scoring_config).
 export function buildProfile(userId: string): Profile {
   const sig = librarySignature(userId);
   const cached = _profileCache.get(userId);
   if (cached && cached.sig === sig) return cached.profile;
 
   const a = getLibraryFacetAnalysis(userId);
+  const cfg = getScoringConfig();
+  const categoryById = new Map(getTagCategories().map((c) => [c.id, c]));
+
   const w = new Map<string, number>();
-  const meta = new Map<string, { kind: string; role?: FacetRole; key: string; label: string; category?: string }>();
+  const meta = new Map<string, { kind: string; role?: FacetRole; key: string; label: string; category?: string; classWeight?: number; BA?: number; n?: number }>();
   for (const f of a.facets) {
     const id = `${f.kind}|${f.role ?? ""}|${f.key}`;
-    const raw = f.avg - a.baseline;
-    const shrink = f.count / (f.count + K_SHRINK);
-    const weight = raw * shrink * (ROLE_WEIGHT[f.role ?? "tag"] ?? 1);
-    w.set(id, weight);
-    meta.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category: f.category });
+
+    let classWeight: number;
+    if (f.kind === "tag") {
+      const cat = categoryById.get(f.category ?? "other");
+      if (cat?.ignored || cat?.weight === 0) continue;
+      classWeight = cat?.weight ?? 1;
+    } else {
+      classWeight = cfg.roleWeights[f.role ?? "tag"] ?? 1;
+    }
+
+    const BA = (cfg.priorStrength * a.baseline + f.sum) / (cfg.priorStrength + f.count);
+    const dev = BA - a.baseline;
+
+    w.set(id, dev * classWeight);
+    meta.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category: f.category, classWeight, BA, n: f.count });
   }
   const profile: Profile = { w, meta, baseline: a.baseline, hasSignal: w.size > 0 };
   _profileCache.set(userId, { sig, profile });
@@ -295,6 +333,70 @@ export function scoreFacets(facets: Facet[], w: Map<string, number>, idf: Map<st
     .sort((a, b) => b.w - a.w)
     .map((c) => ({ kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.f.category, contribution: Math.round(c.w * 100) / 100 }));
   return { score: Math.round(score * 1000) / 1000, reasons };
+}
+
+// ── Fandex Score (H5.2, §3.3) ───────────────────────────────────────
+// The VISIBLE per-item taste-match number (0-100) — a different computation
+// from scoreFacets' idf-weighted ranking score above, which stays exactly as
+// it was and keeps driving Discover's "match" sort (D2: idf may remain a
+// sort signal, never in the shown number). Takes only `facets` + the rated
+// profile, so §4's hard exclusions (community rating, browsed/popularity,
+// release date) hold structurally — this function has no parameter to leak
+// them through even by mistake.
+export interface FandexScoreResult { score: number; reasons: Reason[] }
+
+interface FandexContrib { f: Facet; dev: number; classWeight: number; BA?: number; n?: number }
+
+export function computeFandexScore(facets: Facet[], profile: Profile): FandexScoreResult | null {
+  if (!profile.hasSignal) return null;
+  const cfg = getScoringConfig();
+
+  const matched: FandexContrib[] = [];
+  for (const f of facets) {
+    const id = facetId(f);
+    const w = profile.w.get(id);
+    const meta = profile.meta.get(id);
+    if (w == null || !meta?.classWeight) continue;
+    matched.push({ f, dev: w / meta.classWeight, classWeight: meta.classWeight, BA: meta.BA, n: meta.n });
+  }
+  if (!matched.length) return null;
+
+  // §3.3/D3: per-category cap, TAGS ONLY — top-N by |dev| per category, so a
+  // facet-dense item (20 theme tags) can't swamp a single strong director
+  // match. People/company roles are naturally low-cardinality per item and
+  // stay uncapped.
+  const byCategory = new Map<string, FandexContrib[]>();
+  const kept: FandexContrib[] = [];
+  for (const c of matched) {
+    if (c.f.kind === "tag" && c.f.category) {
+      const arr = byCategory.get(c.f.category) ?? [];
+      arr.push(c);
+      byCategory.set(c.f.category, arr);
+    } else {
+      kept.push(c);
+    }
+  }
+  for (const arr of byCategory.values()) {
+    arr.sort((a, b) => Math.abs(b.dev) - Math.abs(a.dev));
+    kept.push(...arr.slice(0, cfg.perCategoryCap));
+  }
+  if (!kept.length) return null;
+
+  // Weighted MEAN (divide by total weight, not count/sqrt) — keeps
+  // facet-dense items from inflating just by carrying more tags (D3).
+  const totalWeight = kept.reduce((acc, c) => acc + c.classWeight, 0);
+  const weightedDev = totalWeight ? kept.reduce((acc, c) => acc + c.dev * c.classWeight, 0) / totalWeight : 0;
+  const score = Math.max(0, Math.min(100, 50 + cfg.mappingConstant * weightedDev));
+
+  const reasons: Reason[] = kept
+    .sort((a, b) => b.dev * b.classWeight - a.dev * a.classWeight)
+    .map((c) => ({
+      kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.f.category,
+      contribution: Math.round(c.dev * c.classWeight * 100) / 100,
+      BA: c.BA, n: c.n,
+    }));
+
+  return { score: Math.round(score * 10) / 10, reasons };
 }
 
 // ── Filtering ──────────────────────────────────────────────────────
