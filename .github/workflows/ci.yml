@@ -17,6 +17,17 @@ jobs:
           node-version: 22 # matches the Dockerfile (node:22-bookworm-slim)
           cache: npm
       - run: npm ci
+      - name: Doc-size guard (informational only, never fails the build)
+        # TASKS.md was archived from 441 -> 77 lines on 2026-07-18 specifically to
+        # keep planning cheap (see docs/archive/history.md + AGENTS.md doc map).
+        # This just nudges a future session to archive a finished phase again
+        # rather than letting the file silently re-bloat back to its old size.
+        run: |
+          LINES=$(wc -l < TASKS.md)
+          echo "TASKS.md is $LINES lines"
+          if [ "$LINES" -gt 200 ]; then
+            echo "::warning file=TASKS.md::TASKS.md is $LINES lines (>200) — consider archiving finished phases into docs/archive/history.md, per AGENTS.md's doc-map convention."
+          fi
       - name: Typecheck
         run: npx tsc --noEmit
       - name: Lint

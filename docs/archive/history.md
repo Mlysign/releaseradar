@@ -1,16 +1,21 @@
-# TASKS archive — Phases 0–6 (completed)
+# Project history archive
 
-This is the full execution history for everything shipped before the current
-Phase 7 (post-launch) work — moved out of [TASKS.md](../../TASKS.md) 2026-07-18
-to keep the active tracker short. Nothing here is open; it's a decision/why
-record (root causes, verification steps, commit hashes). If you're planning
-new work, you almost certainly want TASKS.md, not this file.
+Everything finished and resolved, in one place — moved out of the active
+[TASKS.md](../../TASKS.md), the old root IMPROVEMENTS.md (now deleted, folded
+into TASKS.md's audit-summary paragraph), and the old root BUGS.md, 2026-07-18
+(and consolidated from three separate archive files into this one the same
+day) to keep the working docs short. Nothing here is open; it's a decision/why
+record — root causes, commit hashes, verification steps. If you're planning
+new work, you want [TASKS.md](../../TASKS.md), not this file. Grep this file
+for a keyword rather than reading it end to end. (Internal `[IMPROVEMENTS.md]`
+links below are historical artifacts pointing at the "Audit findings archive"
+section further down this same file.)
 
-**Covers:** Phase 0 (warm-up) → Phase 1 (audits) → Phase 1.5 (foundation
-hardening) → Phase 2 (search/discovery redesign) → Phase 3 (UX layer) →
-Phase 3.5 (personalized feed) → Phase 4 (country setting) → Phase 5 (go-live
-reviews) → Phase 6 (go-live execution: productionization + security). The 4
-Phase 6 items that were still open when this was archived (P13b, P15, P16,
+**Contents:** Phases 0–6 (completed execution history) → closed QA/nav/
+smoketest findings + H2 (data-model hardening, done) → the five audit passes
+(D#/A#/U#/P#/S#, all resolved) → the closed bug tracker → the old budget/
+decisions/changelog.
+
 P17) are carried forward live in TASKS.md — they also still appear below for
 full history.
 
@@ -360,3 +365,687 @@ Ordered checklist; each step maps to the P#/S# findings in the tables below. **S
 - _2026-06-14_ — **T5/T6 review → reopened as 🔵; added T23.** User found the shared SearchBar doesn't own the full search UI (Library hide-rated, Wishlist/Library sync + source filters, Discover dead "Filters" button all still page-local). New **T23**: pull ALL filters (type, source, facet include/exclude, hide-rated) into one always-visible shared section — no collapse/popover. Confirmed decisions: type/source chips count as search filters; fetch-more from external DBs on a search query. Full spec under the Phase 2 table.
 - _2026-06-14_ — Bug triage ([bugs.md](bugs.md)): "Warriors of the Wind merge" = not a bug (TMDB alt-title). Insights studios = fixed display half (publishers now shown in `InsightsView`) + logged the data-coverage root cause as **D9** (game sync persists list payloads lacking dev/pub; 97% of library games affected). 29 tests green, tsc clean.
 - _2026-06-14_ — ✅ **A2** (Phase 1.5): schema setup now implicit in `getDb()` via private `ensureSchema(db)` (guarded by `_initialized`); removed all 24 `initDb()` calls + imports from API routes + `oauthConnect.ts`. `initDb()` kept as a deprecated alias for standalone scripts/tests. tsc clean, 16 tests green. Next: **D4** (migration runner).
+
+---
+
+## QA / navigation / smoketest findings — closed (2026-07-18)
+
+These were logged during the P17 QA sweep, the back-button deep-dive, and the
+first `/smoketest` run, and all fixed the same day. Moved here so the active
+TASKS.md only lists what's still open.
+
+### QA sweep — closed findings
+| Q1 ✅ | 🟠 | UI | NavBar | **FIXED 2026-07-18** (session-aware NavBar: anon gets Discover + "Log in" → generic SignInDialog with returnTo; module-cached /api/auth/me probe). ~~**Nav is not session-aware.**~~ A LOGGED-OUT visitor on a public page (facet / item) sees the full authed nav — Wishlist / Library / Insights / Profile **+ "Log out"** — on both desktop AND mobile. Clicking any bounces to login. Pre-existing (shared with the already-shipped public item pages), but P17 makes it much more visible since facet pages are a public entry point. Fix: session-aware NavBar (public links + "Log in" for anon). |
+| Q2 ✅ | 🟠 | UX | Landing | **FIXED 2026-07-18** ("or — Browse without an account →" link to /discover under the login options). ~~**No "browse without an account" path.**~~ Logged-out `/` offers only Trakt/Steam/RAWG login — nothing links to the now-public `/discover` or facet pages. Anonymous visitors who land on `/` can't reach the public catalog. Add a "Browse" / "Explore without signing in" entry. |
+| Q4 ✅ | 🟡 | UI | Insights → Taste by Era | **FIXED 2026-07-18** (full 4-digit decade labels). ~~**Ambiguous decade labels.**~~ The x-axis shows two "90s" and two "20s" columns (1890s vs 1990s, 1920s vs 2020s) with no century — indistinguishable. Use 4-digit ('1990s') or century-qualified labels. |
+| Q5 ✅ | 🟡 | UI | Settings | **FIXED 2026-07-18** (all-connected → "All available login methods are connected" message). ~~**"Add login method" section is empty**~~ — heading + description ("Connect another account…") render with no buttons beneath when all providers are already connected (+ Letterboxd hidden). Show an "all connected" message or hide the section. |
+| Q6 ✅ | 🟡 | UX | Landing / Settings | **FIXED 2026-07-18 (user's call: add it).** "Continue with TMDB" added to AuthOptions (landing + sign-in dialog) — the TMDB callback already fully supported fresh login incl. the H2c return cookie; this was UI-only. **Needs a live TMDB login round-trip to verify** (can't OAuth locally). ~~Login offers Trakt/Steam/RAWG but **not TMDB**~~ |
+| Q13 ✅ | 🔵 | UI | 404 | **FIXED 2026-07-18** (branded `app/not-found.tsx`: logo + "Browse the catalog" / "Go home"; covers unknown routes AND every notFound()). ~~Unmatched facets (and any 404) render Next's **default unbranded 404**.~~ |
+
+### Navigation / back-button — closed findings
+| N1 ✅ | 🟠 | UX | P17 facet | **FIXED 2026-07-18** (sort → `?sort=` via native replaceState — shareable + SSR reads it on Back; Load-more depth + items stashed in sessionStorage keyed per facet, restored only when the stash's sort matches the SSR'd one; scroll restored via useScrollRestore). Verified: rating+120 items+Portal 2+scroll all survive item→Back. ~~**Facet page loses sort + "Load more" state on Back.**~~ Set Sci-Fi to "Highest rated" + Load more (120 items, Portal 2 first) → open an item → Back ⇒ resets to "Most popular", 60 items, Interstellar. Sort/page are client-only useState, wiped on the re-mount. Discover, by contrast, DOES persist its state (N-note below), so this is an inconsistency in my own code. Fix: persist facet sort/page — reflect sort in a `?sort=` query param (also makes it shareable) and/or usePersistedState. |
+| N2 🔶 | 🟠 | UX | Discover / Wishlist / Library | **FIXED for Wishlist + Library 2026-07-18** — two-part root cause: (1) GroupedView's today-scroll re-fired on every mount and beat the restore → new `autoScrollToToday` prop, off when `hasSavedScroll()`; (2) **the router's scroll-to-top on navigate-away fired one last scroll event that saved `0` over the real position** (why useScrollRestore never worked here) → pathname pin in the save listener (usePersistedState.ts). Verified: wishlist scroll 5000 survives item→Back. **Discover browse DONE TOO (2026-07-18, later same day):** browse depth (`pages`/`backPages`) mirrored to sessionStorage; `loadDefault` refetches that depth on mount (feed pages are server-cached + deterministic, capped at 10 pages/section) so the saved scroll lands on real content; today-scroll suppressed when a restore is pending. Verified: 55 items + scrollY 6000 + the exact clicked card restored on Back. **N2 fully closed.** ~~**Browse scroll position lost on Back.**~~ These pages auto-scroll to "today" on every (re)mount (Discover browse lands at scrollY ~9012 of ~14816). So scroll down to a future month → open an item → Back ⇒ you're dumped back at "today", not where you were. (Root of Q3.) Search-results mode is fine (starts at top). Fix: preserve/restore scroll on Back, or only auto-scroll-to-today on first mount, not on history restore. |
+
+### Smoke test — 2026-07-18 (all 6 findings closed same day)
+Scope: full local sweep per [smoketest.md](smoketest.md) — logged-in flows (wishlist write round-trip, calendar view, insights, settings, facet overlay), logout, full anonymous surface (landing, discover incl. search, item page + H2c dialog/intent/guard, facets + sort/Load more, gated-page bounce, 404s, robots/sitemap/health), API error-shape probes, mobile viewport. **Overall healthy: zero console errors anywhere, server logs clean (known Steam-CDN 404 noise only).** Known Q/N findings re-confirmed where crossed (Q1, Q2, Q5, Q7, Q9, N3) — not re-logged. ID = `SM#`. Severity: 🟠 fix soon · 🟡 minor · 🔵 nice-to-have.
+
+| ID | Sev | Type | Area | Finding (with repro) |
+|----|:--:|:--:|------|----------------------|
+| SM1 ✅ | 🟡 | ui/data | Wishlist | **FIXED 2026-07-18** (`rr2:wishlist-toggled` window event from useQuickActions on success; wishlist page listens and drops the row — verified live, row vanishes instantly). ~~**Removed item's row stays until reload.**~~ On `/dashboard`, search an item → click its "On your wishlist — remove" quick action → `DELETE /api/watchlist` returns 200 and the removal persists (gone after reload), but the row keeps rendering as-is with no visual feedback. A user can't tell the remove worked. |
+| SM2 ✅ | 🟡 | state | View toggle | **FIXED 2026-07-18 (user's call): view toggle is now PER-PAGE** (`useViewMode(key, …)` → `rr_view_wishlist` / `rr_view_library` / `rr_view_discover`; old global `rr_view_mode` abandoned) **while the media-type filter (Games/Movies/Shows) is now GLOBAL** (one shared `rr_type_filter` key across Wishlist/Library/Discover — Discover's copy inside `rr_discover_filters` is ignored). Verified: Calendar on Wishlist no longer flips Discover; Games toggled on Wishlist filters Discover. ~~View mode is one global key…~~ |
+| SM3 ✅ | 🟡 | data | P17 facet sort | **FIXED 2026-07-18 (user's call: Bayesian damping).** `sortPool`'s rating sort now orders by `(v·R + m·C)/(v+m)` with m=50 and C = the pool's well-voted average (no small-pool fallback in the prior — that would let the outliers pull it). Displayed score stays the raw average. Verified: Nolan's Highest rated now leads Dark Knight/Interstellar/Inception; +2 unit tests. ~~**"Highest rated" has no vote-count damping**~~ |
+| SM4 ✅ | 🟡 | ui | Item page (game) | **FIXED 2026-07-18** (normalize.ts maps Steam rating-system ids → display labels, `steam_germany`→USK; unknown systems title-cased; lossless guard re-run green — Silksong now "USK 6"). ~~**Raw age-rating enum shown to users**~~: Silksong renders "RATED — STEAM_GERMANY 6". Movies are fine ("FSK 12 · PG"). Map games' rating-body enums to display labels (USK/PEGI/ESRB etc.). |
+| SM5 ✅ | 🔵 | ui | Settings | **FIXED 2026-07-18** (the JSX space after `{p.label}` was swallowed in the compiled output — now a template string). ~~Copy typo: "Read-only – **Steamdoesn't** support…"~~ |
+| SM6 ✅ | 🔵 | perf | Anon API noise | **FIXED 2026-07-18.** New shared `src/lib/sessionProbe.ts` (cached /api/auth/me probe — 200 `{user:null}` for anon, so probing itself never 401s; `resetSessionProbe()` on login/logout incl. RAWG's in-place login in AuthOptions). Gated: PersonalSection's `/api/detail`, the facet `/api/facet/mine` overlay, Discover's `POST /api/discover/find` + `facet-fetch` (anon search goes straight to the public `GET /api/discover?q=`). NavBar now uses the same probe. Verified anon across item/facet/search: **zero 401s in the network log**. ~~Anonymous pages fire authed API calls that 401 silently~~ |
+
+**Held up well (verified this run):** H2c anon machinery end-to-end locally — anon item page shows the REAL star/wishlist controls, star click opens the in-page sign-in dialog (no redirect), intent stored in localStorage (`fandex.pendingIntent` = `{path, action:{kind:"rate",value:8}}`), login links carry `returnTo`, and the **open-redirect guard verified at the HTTP layer** (`returnTo=//evil.com` and absolute URLs → NO `rr2_oauth_return` cookie; safe path → cookie set). **Wishlist write round-trip** (obscure RAWG-linked game): add → 200 → survives reload → consistent on item page + wishlist page → remove → 200 → gone after reload (net-zero, real RAWG write-back errored nothing). **Logout** works (epoch bump, clean landing redirect, APIs 401 after). **URL hygiene**: wrong slug → 308 canonical; bad/garbage uuid → 404; unknown person → 404; legacy `/insights/facet?kind=…&key=…` → 308 to the public page (`type=` instead of `kind=` falls back to `/insights` — intended). **Gated pages anon** → SSR 200 shell + graceful client bounce to `/`, no data leak, `/api/*` properly 401 without a cookie. **robots.txt** allow/disallow set correct; **sitemap** root-only (expected while noindex); `/api/health` ok. **Facets anon**: bio + sort re-query + Load more 60→120. **Calendar view** renders correctly (current month, releases on dates). **Wishlist empty-search state** ("No results — Clear search") works. Mobile facet page + menu behave (Q1/Q9 re-confirmed, nothing new).
+
+_Side effects of the sweep (local dev): `users.session_epoch` bumped 2→3 by testing logout (old local session cookies invalid — OAuth re-login unaffected); preview-browser `rr_view_mode` left on "card"._
+
+---
+
+## H2 — Data-model hardening (done 2026-07-16/17, all 3 phases A/B/C)
+**Goal:** media data is consistent, persistent, and accurately reflects the user's real data + recommendations.
+
+**Audit (2026-07-16)** compared the *intended* data flow against the real schema. Intended: wishlist holds `media_item_id`s → a table maps them to platform ids → the server assembles enriched items from those ids; discover asks providers "what's popular" (platform ids) + the recommender "what does this user like" (`media_item_id`s, empty when logged out), **enriches anything not already enriched**, and the detail page builds from the `media_item_id`.
+
+**🔑 ROOT CAUSE — one fact drives three gaps.** `media_links` stores the **full provider payload** in `raw_data`, not just the id: **~92KB avg per TMDB link, 149.6MB / 4,012 links = ~94% of the entire DB** (local 160MB; live ~249MB). So the server never "assembles from platform ids" — it merges cached blobs (`mergeLinks`) and never calls the platforms at read time. Breakdown: tmdb 1,472 links / 135.5MB · rawg 722 / 8.4MB · steam 576 / 4.4MB · trakt 1,242 / 1.4MB.
+
+**Gaps vs the intended model** (8): ① discover never persists → discover items have **no `media_item_id`** (live `FeedCandidate`s with composite ids) — *this is what forced P13's source-id URL machinery*; ② `/discover` is **UI-gated only** (`discover/page.tsx`: `if (!d.user) router.push("/")`) while `/api/discover` **already supports anonymous** (`getSession()?.userId ?? null`, `annotate()` returns empty user-state, region → `DEFAULT_COUNTRY`) → ~1 line; ③ anonymous sees a sign-in **hook** instead of the real controls; ④ **no login modal / return-url / intent preservation** (`PersonalSection` links to `/` → OAuth lands on `/dashboard`, intent lost); ⑤ assembly-from-blobs (= root cause); ⑥ `media_external_ids` vs `media_links` — **NOT duplication, keep both** (`media_links` = sources we hold data from; `media_external_ids` = the **cross-id matching index**, incl. ids extracted from *inside* other providers' payloads, used by `matcher.ts` to prevent false merges — merging them re-breaks that) → resolution is a comment; ⑦ wishlist keyed **(item, platform)** not just item — `user_item_state` is the source of truth, `user_watchlist`/`user_library` are **derived caches** (`rebuildCaches()`) and *those already are* the one-row-per-item model; the `source` column is what lets a Steam prune remove only Steam's entry ([[trakt-sync-completeness]]) → **KEEP**; ⑧ oversized blobs (= root cause, as a task).
+
+| ID | Status | Task | Est. | Notes |
+|----|:--:|------|:--:|------|
+| **H2a** | ✅ | **Blob projection** — store a normalized projection at WRITE time instead of the raw payload | ~250k | **DONE 2026-07-16** (`2c4f688` projector+guard, `c62127d` wiring+migration). **raw_data 149.6MB → 35.4MB (-76.3%)**; tmdb 135.5→22.3MB (-83.6%); DB file 160MB → **42.4MB** after VACUUM. `src/lib/sources/project.ts` (`projectRawData` + `PROJECTION_VERSION`), applied at matcher's 4 write sites; **migration 7** adds `media_links.projection_version` + backfills by projecting the STORED blob in place (**no network** — the fat rows already contain everything kept). `ensure{Tmdb,Game}Detail` now key on the version stamp instead of **field-sniffing** (which a projection makes permanently "stale" → would've stampeded TMDB with ~1,472 refetches). VACUUM runs once in `db.ts` after any migration, OUTSIDE the runner (VACUUM can't run in a transaction) — frees 29,116 pages; without it the file stays 159.5MB. Litestream re-replicates the file once. **Guard: `projection.lossless.test.ts`** asserts `normalize(original) === normalize(projected)` over the real catalog (skips w/o data/rr.db) — it caught 4 real losses reading the code did NOT: rawg `background_image_additional` (wrong images on 704/722), tmdb `videos` filtering (**different trailer** on 289 titles — the pick is an order-dependent `find` with an "any YouTube video" last resort), `last_episode_to_air` (null show runtime), `origin_country` (null country). **Accepted:** 2 titles differ on the LEGACY debug-only `streamingProviders` via pickRegion's arbitrary `map[Object.keys(m)[0]]` last resort (only fires when country+US+GB all lack providers; US+GB are curated so the real chain is intact). **Re-run the guard after ANY change to project.ts or normalize.ts.** Old est. ~250k. |
+| **H2b** | ✅ | **Discover persists at enrich time** → every item has a uuid → **delete** the source-id URL machinery → ungate `/discover` | ~200k | **DONE + DEPLOYED 2026-07-17** (`693113c` persistence+pool, `9449ecd` deletion+ungate, `37803dc` the upgrade-path fix). **Verified on fandex.org**: anonymous `/api/discover` 80/80 uuids (browse), 38/38 (search), 20/20 (load-more), no `raw` leaked; item page 200 with **no redirect hop**, 85KB SSR, `noindex` intact, no personal-data leak. **A LATE BUG worth remembering — every automated check passed while the feature was broken on a real db:** `CREATE INDEX … ON media_items(browsed)` sat in db.ts's CREATE TABLE block, which runs BEFORE `runMigrations`; on a FRESH db the column exists (all 154 tests, typecheck, lint, build, and the real-DB dry-run green), on an EXISTING one it throws and **aborts ensureSchema before the migration that adds it** → the db never migrates → `/api/discover` returned **22/80 uuids**. Only loading the real app against the real db found it (`schemaUpgrade.test.ts` now pins it; `getDb()` no longer caches a connection whose ensureSchema threw). `/api/discover` writes a row for every item it returns — from the provider LIST payload it already holds (**no network**) — and hands the uuid back as the item's `id`; `src/lib/discoverPersist.ts`. Then **deleted** `parseItemId`, `anyItemHref`, `ID_SOURCES`, `resolvePublicDetail`'s live branch, `persistLive` (create-on-view) + `mayPersist`, and itemUrl's source-id collapse (**−202/+103**). `/discover` ungated (it was UI-gated only; the API always allowed anon). **Scope decision: persist for ANONYMOUS callers too** (incl. search) — that's what allowed the FULL deletion; the write is still bounded by *the providers' catalogs* (we only ever store a payload a provider returned to one of our own queries — a caller picks *which* real titles, never the ids), rate-limited, and ~1KB/row post-H2a. **4 traps, none visible from the plan:** ① **the projection stamp** — `upsertMediaItem` stamped `PROJECTION_VERSION` at every write site, so a list payload would read as a full detail blob and `ensureTmdbDetail` would skip the refetch **forever** (every browsed item's page permanently rendering from ~1KB of list data). Thin writes stamp **0** + are **insert-only** (never degrade a stored blob) → `SourceItem.thin`. ② **the payload's source** — `traktToCandidate` labels candidates `source:"tmdb"` while holding a **Trakt** payload → `RawPayload` carries the provider it came FROM, else wrong projector/normalizer + no cross-id. ③ **`ensure{Tmdb,Game}Detail` never wrote the refresh back** (in-memory only; `tmdbRefreshed` was just a debug flag) → every browsed item would refetch TMDB on **every view, forever**. Now heals once (`storeRefreshed`, guarded on a uuid `mediaItemId`). ④ **the pool** — the recorded trap (IDF over all of `media_items`) was the *small* half: `getCache().vectors` also feeds `find()`/Best-match, Insights and `searchTitles` → **browsed items would appear as if you'd added them**; and `catalogSignature()` counts ALL of `media_items` → **every browse invalidated the cache → full catalog rebuild (parsing every `raw_data`) on the request path**. **Membership is NOT the filter** — `recommendIngest` persists unowned titles *on purpose* ("a real pool to rank, not just the watchlist") → **migration 8** adds `media_items.browsed` (provenance; DEFAULT 0 backfills every existing row correctly, no data pass) and the pool is `browsed = 0 OR id IN user_item_state` — the **union makes promotion automatic**, no flag to flip. **Guards:** `discoverPersist.test.ts` (canonical fields, cross-ids, the stamp, no-degrade, Trakt routing, idempotence) + `discoveryPool.test.ts` (pool in/out, ingest stays, promotion, no-demote, **+ a rebuild tripwire verified to fail when the signature is unscoped**). **Side effect (good):** `media_items` stops mirroring *the user's library* → **substantially dilutes the P13b privacy concern**. |
+| **H2c** | ✅ | **Visible controls + login-with-intent** | ~150k | **DONE + DEPLOYED 2026-07-17** (`6afe601`, live-verified on fandex.org). Anonymous now sees the REAL stars + "Mark as watched" + a "+ Add to wishlist" affordance; interacting opens an in-page `SignInDialog`. **Not a literal popup** (agreed): providers are OAuth *redirects* (Trakt round-trips via trakt.tv), popup OAuth is fragile and breaks in the planned **TWA (P14–P16)** → one full-page round-trip instead. **Two same-origin channels carry state across the redirect:** ① **return PATH** rides a short-lived httpOnly cookie mirroring the OAuth nonce (`oauthState.ts`: `setOAuthReturnCookie`/`readOAuthReturn`/`clearOAuthReturn`) — the 4 start routes stash `?returnTo`, the 3 fresh-login callbacks (`oauthConnect.ts` trakt/letterboxd + custom steam/tmdb) honor it **on fresh login only** (linking keeps `/settings?connected=`) and clear it on every exit; **`isSafeReturnPath` is the open-redirect guard** — same-origin absolute paths only (rejects `//host`, schemes, `/\`), unit-tested for every bypass. ② **pending INTENT** rides `localStorage` (`pendingIntent.ts`) — never sent to the server, **path-guarded** + **once-only**, drained by `PersonalSection` exactly once when it first resolves to a signed-in viewer (covers both redirect providers AND the in-place RAWG login). **Notes:** anon wishlist intent is provider-less (`{kind:"wishlist"}`); the drain resolves the concrete provider from real `platforms` data after login (avoids a server-registry import in the client bundle). `SignInDialog` + `page.tsx` share one extracted `components/auth/AuthOptions.tsx` so they can't drift. The drain defers via `queueMicrotask` (the write handlers setState synchronously → cascading-render lint rule; microtask is the real fix). **Guards:** `oauthState.test.ts` (+13 cases: guard bypasses + cookie lifecycle) + `pendingIntent.test.ts` (round-trip, path-guard discard, corrupt/unavailable storage). **Live-verified** non-destructively (forced `/api/detail`→401 + client remount, no logout): real controls render, star-click stashes `{path,action:{kind:"rate",value:8}}`, both OAuth links carry `?returnTo=<item path>`, wishlist stashes `{kind:"wishlist"}`, Esc closes. Real OAuth round-trip not completed (return-cookie + drain are unit-tested). |
+
+**⚠️ ORDER IS LOAD-BEARING: A → B → C.** B multiplies row creation (every browsed popular item persists). At 92KB/item that compounds the bloat; post-projection it's negligible. B-before-A = writing thousands of fat blobs we then have to migrate. C is independent and can interleave, but lands best once clicking a discover item works logged-out (= B).
+
+See [[data-model-gaps-and-plan]], [[trakt-sync-completeness]], [[testing-and-migrations]], [[discovery-insights-rebuild]], [[platform-integration-architecture]], [[public-item-pages-p13]].
+
+## Audit findings archive (D#/A#/U#/P#/S# — all resolved)
+
+### ReleaseRadar — Improvements Document
+
+Shared output of the Phase-1 audits (and later Phase-5 reviews). Each finding is a
+proposal to **review and execute together in a future session** — nothing here has
+been applied. Findings are id'd (`D#` data, `A#` architecture) like tasks so we can
+pick them off individually.
+
+**Severity:** 🔴 High (correctness/scaling risk) · 🟡 Medium (maintainability) · 🟢 Low (polish)
+**Effort:** S (<½ day) · M (1–2 sessions) · L (multi-session)
+
+Overall verdict: **the data *model* is a genuine strength** — identity-agnostic
+`users` + `user_identities`, canonical `media_items` + per-source `media_links` + a
+merge layer, and a now-complete `MediaSource`/`MetadataProvider` adapter split. The
+issues below are mostly about *how state is stored within that model* and *a few
+monoliths/duplications*, not the core shape.
+
+---
+
+## Part I — Data structure review (T16)
+
+### D1 ✅ DONE (2026-06-14) — Per-source user state is JSON-in-a-column, not queryable rows
+_Resolved with D2 in migration v3: `user_item_state(user,item,source,relation,status,rating,review,reviewed_at)` is the normalized truth; `user_library`/`user_watchlist` are caches rebuilt from it on every write. Per-source ratings are now SQL-queryable and the canonical rating can't drift; the library route's bespoke write goes through `recordLibraryRating`, fixing the un-propagated "clear a rating" case. Cache tables kept (expand-then-contract; dropping their JSON columns is a later step)._
+
+Per-platform ratings/status/review live as a JSON blob in `user_library.metadata`
+(`{ [source]: { rating, status, review, reviewedAt } }`), and `user_library.rating`
+is a **denormalized average cache** that every read path recomputes
+(`averageRating(parseRatings(metadata)) ?? row.rating` — see [ratings.ts](src/lib/ratings.ts), [libraryAnalysis.ts](src/lib/libraryAnalysis.ts:66)).
+- **Why it matters:** the per-source ratings can't be queried/aggregated in SQL — every
+  insight parses JSON in app code; the cache can drift from the blob; "clear a rating"
+  is already a known un-propagated case.
+- **Proposal:** add a normalized `user_item_state(user_id, media_item_id, source, status,
+  rating, review, reviewed_at)` table (one row per source). The canonical `user_library`
+  row becomes a thin cache/view derived from it. Aggregations (insights, "you vs crowd")
+  move into SQL.
+- **Trade-off:** more rows + a migration; for a personal-scale DB the win is consistency
+  and queryability, not raw speed. Sequence this **before** T22 (country setting) and the
+  Tinder feed (T10), which both want cleaner state queries.
+
+### D2 ✅ DONE (2026-06-14) — `user_watchlist` and `user_library` are near-duplicate structures
+_Resolved with D1: the four copy-paste twins now delegate to a single `setSourceState`/`clearSourceState` + `rebuildCaches` pair over `user_item_state`. Public signatures unchanged so callers (routes/ingest/sync/refresh) are untouched._
+
+Both tables are `(id, user_id, media_item_id, platform_sources JSON, …, UNIQUE(user,media))`
+and their helpers are copy-paste twins: `upsertWatchlistEntry`/`removeWatchlistSource`
+vs `upsertLibraryEntry`/`removeLibrarySource` ([matcher.ts:181-302](src/lib/matcher.ts:181)).
+- **Proposal:** either (a) unify into one `user_item(user_id, media_item_id, relation:
+  'wishlist'|'library', …)` table, or (b) keep two tables but extract the shared
+  `platform_sources` add/remove logic into one helper. (a) pairs naturally with D1.
+
+### D3 🟡 S — Duplicated title-normalization with a hand-maintained invariant
+`db.ts` backfills `norm_title` with an **inline** normalizer and a comment that it
+"MUST stay in sync with `normalizeName()` in merge.ts" ([db.ts:157](src/lib/db.ts:157)).
+Two copies of the same rule = a silent-duplicate-items bug waiting to happen if one drifts.
+- **Proposal:** move `normalizeName` into a tiny dependency-free module (e.g.
+  `src/lib/normalize.ts`) and import it in both `db.ts` and `merge.ts`. Removes the invariant.
+
+### D4 ✅ DONE (2026-06-14) — No migration framework; schema changes are ad-hoc
+_Resolved: `src/lib/migrations.ts` exports an ordered `MIGRATIONS` list + `runMigrations(db)` (each migration in its own transaction, bumps `user_version`). Pure-SQL bodies so the identical list runs both in-process (`getDb()`) and standalone against the live DB (`scripts/migrate.mjs`). user_version 1 stays the inline norm baseline; migrations start at 2._
+
+`initDb()` does `CREATE TABLE IF NOT EXISTS` + a one-off `ALTER` + backfill inline
+([db.ts:137-164](src/lib/db.ts:137)). This worked for one column but won't scale to an
+evolving schema (and D1/D2 are real schema changes).
+- **Proposal:** a minimal versioned runner keyed on `PRAGMA user_version` — an ordered
+  list of migration steps applied once. ~30 lines; makes D1/D2/future changes safe and
+  ordered.
+
+### D5 ✅ DONE (2026-06-14) — Cross-ids are re-parsed from `raw_data` JSON on every match
+_Resolved (migration v2): indexed `media_external_ids(media_item_id, source, external_id)`. `remergeItem` rebuilds an item's ids from its links; `findMatchingItem` does an indexed (namespace,id) lookup + indexed conflict check instead of parse-all-candidates — and now merges across title-spelling differences when a cross-id proves identity. Live backfill (4000 rows) via pure-SQL `json_extract`._
+
+`findMatchingItem` loads every candidate link and `JSON.parse`s its `raw_data` to
+recover cross-ids ([matcher.ts:107-116](src/lib/matcher.ts:107)). The match path is the
+hot path during sync.
+- **Proposal:** persist extracted ids in an indexed `media_external_ids(media_item_id,
+  source, external_id)` table (written by `extractCrossIds` at link time). Matching
+  becomes an indexed lookup instead of parse-all-candidates; also lets D1's queries join
+  cleanly. Pairs with D4.
+
+### D6 🟢 S — `libraryAnalysis` cache signature can miss edits
+The analysis cache key is `COUNT, MAX(reviewed_at), SUM(rating)` ([libraryAnalysis.ts:159](src/lib/libraryAnalysis.ts:159)).
+Two offsetting rating edits (e.g. 7→8 and 8→7) leave count/sum/max unchanged → stale cache.
+- **Proposal:** include `MAX(rowid)`/a content hash, or bump an `updated_at` on every write.
+  Low likelihood, easy fix.
+
+### D8 ✅ DONE (with D3) — `normalizeName` strips hyphens without spacing (surfaced by A4 tests)
+_Resolved 2026-06-13: normalize rule changed to hyphen→space (apostrophes dropped), centralized in
+`src/lib/normalize.ts`, and all `norm_title` rows re-backfilled via a `user_version`-guarded migration.
+Remaining edge case (out of scope): purely non-Latin titles (e.g. Cyrillic) still normalize to `""` and
+rely on cross-id matching — unchanged from before._
+
+`normalizeName` removes `[^a-z0-9 ]` entirely, so "Spider-Man" → `spiderman` while
+"Spider Man" → `spider man` ([merge.ts:949](src/lib/merge.ts:949)). The two don't match, so the
+same title formatted differently across sources can split into duplicate canonical items (cross-id
+matching saves most real cases, but title+year fallback misses these).
+- **Proposal:** replace hyphens/underscores/punctuation with a space before collapsing, so
+  punctuation variants normalize equal. Cheap; pairs with D3 (centralizing the normalizer) and
+  is guarded by the A4 tests. Re-backfill `norm_title` after changing it (one-off).
+
+### D7 🟢 S — Missing child-FK indexes for cascade/reverse lookups
+`user_library`/`user_watchlist` are indexed on `user_id` but not `media_item_id`; same for
+the `ON DELETE CASCADE` from `media_items`. Negligible at personal scale, relevant if the
+catalog grows. Add `idx_library_media`, `idx_watchlist_media`.
+
+---
+
+## Part II — Software architecture review (T17)
+
+### A1 ✅ DONE (2026-06-14) — `merge.ts` (1006 lines) is a field-oriented switch monolith
+_Resolved: per-source normalizers live in `src/lib/sources/normalize.ts` (one `normalizeX(raw,type) → SourceNormalized` per source, in a registry). `merge.ts` is now pure priority/union policy over those partials — no `switch(source)` anywhere. Adding a source = one normalizer + its entry in each field's priority list; zero edits to the merge body. Locked by a 7-snapshot characterization test (full `mergeLinks`/`explainMerge`/`mergeForCanonical` over rich movie/game/show fixtures) proving byte-identical output. Follow-up (A5): co-locate each normalizer with its adapter and fold the priority lists onto `catalog.ts`._
+
+It's ~20 `extractX(source, data)` functions, each a `switch (source)` over all platforms
+([merge.ts:37-207+](src/lib/merge.ts:37): extractTitle/Description/ReleaseDate/Poster/Images/
+Tags/Platforms/Metacritic/Developer/…). Adding a source = editing *every* switch; the logic
+for one platform is smeared across 20 places.
+- **Why it matters:** this is the single biggest "not modular" item. The `MetadataProvider`
+  registry already normalizes per-id fetches, but `merge.ts` still re-extracts from `raw_data`
+  independently, so per-source knowledge lives in two places.
+- **Proposal:** invert the axis — each source contributes a `normalize(raw) → Partial<Canonical>`
+  (co-located with its adapter/metadata provider); `merge.ts` shrinks to a priority-merge over
+  those normalized partials. New source = one normalizer, zero edits to merge. Do this as a
+  staged extraction (one field-group at a time), not a big-bang rewrite.
+
+### A2 ✅ DONE (2026-06-14) — `initDb()` is manually called in 24 files
+_Resolved: schema setup runs implicitly in `getDb()` (private `ensureSchema`); all 24 manual `initDb()` calls + imports removed. `initDb()` kept as a deprecated alias for standalone scripts/tests._
+
+Every route re-invokes `initDb()` ([24 call sites](src/app/api)); a new route that forgets
+it fails at runtime.
+- **Proposal:** make initialization implicit — run schema setup once inside `getDb()` (guarded
+  by the existing `_initialized` flag) so callers can't forget. Removes 24 redundant calls.
+
+### A3 🟡 M — `item/page.tsx` (790 lines) is a monolithic client component
+Largest component in the app; per the platform memo it also **duplicates `PLATFORM_CONFIG`**
+that otherwise lives in `watchlistStatus.ts`.
+- **Proposal:** split into sections (hero / ratings / facts / credits / sources panels) and
+  delete the duplicated config in favour of the registry capability layer. Natural fit for the
+  Phase-3 UI/UX review (T18) and the detail-page redesign (T13).
+
+### A4 🟡 M — No automated tests around the riskiest logic (merge/matcher)
+The trickiest, highest-blast-radius code (canonical merge, cross-id matching) is covered only
+by manual `scripts/*.ts` probes (`test-matcher.ts`, `verify-merge.ts`). The matcher has already
+had a false-merge bug.
+- **Proposal:** add a lightweight test runner (vitest) with fixtures for `findMatchingItem`
+  (distinct same-title works stay separate; same-id merges) and `mergeForCanonical` priority.
+  This is the safety net that makes A1 and D1 refactors safe to do.
+
+### A5 🟢 S — Residual per-source string-literal switches outside the adapter layer
+The account-driving code is now registry-driven (good), but `switch (source)` still appears in
+`merge.ts`, `constants.ts`, `itemUrl.ts`, etc. A1 removes the bulk; the remainder (colors/labels/
+url-params) can move onto the `catalog.ts` entries so a source's presentation is declared once.
+
+### A6 🟢 S — Inconsistent error handling across API routes
+Routes vary in how they validate auth/inputs and shape errors. Worth a one-pass convention (a
+small `withUser(handler)` wrapper that resolves the session + returns 401 uniformly) — also
+trims boilerplate. Revisit alongside A2.
+
+---
+
+## Recommended execution order
+Foundations first (they de-risk everything else), then the big refactor:
+
+1. **A4** (tests) — safety net before touching merge/matcher.
+2. **D3 + A2** (S) — quick, removes two footguns.
+3. **D4** (migration runner) — prerequisite for D1/D2/D5.
+4. **D1 + D2** (normalized user state) — unblocks T22 / T10 and fixes the rating-cache drift.
+5. **D5** (external-ids table) — speeds matching, cleans joins.
+6. **A1** (merge.ts inversion) — staged, guarded by A4.
+7. **A3 / A5 / A6 / D6 / D7** — fold into Phase-3 UI work and general cleanup.
+
+> Open question for review: D1/D2 imply a real schema migration on `data/rr.db`. Want to do
+> these against a DB copy first (as was done for the matcher fix), and keep a `.bak`?
+
+---
+
+## Part III — UI/UX review (T18)
+
+Whole-project UX pass after the Phase-2 search/discovery rebuild. Code/behavior-based
+(reading components + known runtime behavior); **not yet validated against live screenshots** —
+a visual pass on the running app would add contrast/spacing/overflow findings this misses.
+Findings id'd `U#`. Each notes which existing task it feeds (T11 cards · T12 nav-cache · T13
+detail · A3 detail-split · A7 react-hooks) or is **NEW**.
+
+**Severity:** 🔴 High (usability/accessibility blocker) · 🟡 Medium · 🟢 Low (polish)
+
+### U1 🔴 — Quick actions (rate / wishlist) are hover-only → invisible on touch/mobile
+PosterCard + ListCard reveal the rate bar + wishlist button only on `group-hover`
+([PosterCard.tsx:77](src/components/PosterCard.tsx:77), [ListCard.tsx:70](src/components/ListCard.tsx:70)).
+Touch devices have no hover, so on mobile/tablet you **cannot rate or wishlist from a card at all** —
+the app's core action is unreachable without opening the detail page. Same for the hover tooltip.
+- **Proposal:** show a compact always-visible affordance on touch (or a tap-to-reveal action row);
+  detect coarse pointer. Feeds **T11**.
+
+### U2 🔴 — Color-only encoding without text alternative (source dots; partial elsewhere)
+Wishlist providers render as bare colored dots (`SourceDots`, [ItemBadges.tsx:26](src/components/ItemBadges.tsx:26))
+with no label/icon — meaningless to anyone who doesn't memorize the palette, and invisible to
+color-blind users. (Rating and type at least carry text.) T11 already wants source color-coding
+**removed** from cards; replace with explicit **wishlist (bookmark) + library (owned/watched) icons**
+in the corner so state is legible without color. Feeds **T11**.
+
+### U3 🟡 — Type indicator is inconsistent across views
+Card shows type only as a 0.5px bottom color **stripe** (no label/icon on the card face;
+[PosterCard.tsx:67](src/components/PosterCard.tsx:67)); list row shows a `TypeBadge` text chip;
+calendar uses a 1.5px dot. T11 calls for a **type tag + icon** (game/movie/show) with color coding
+**consistently** everywhere. No type icons exist yet (only color). Feeds **T11**.
+
+### U4 🔴 — Mobile navigation + tall sticky bar
+NavBar is a single flex row of 6 links + Log out ([NavBar.tsx](src/components/NavBar.tsx)) with no
+hamburger/overflow → wraps or clips on phones. And the now-unified `SubBar` stacks up to **4 rows**
+(type/source chips · facets · year+membership · search+sort+view) — always visible — which on a
+small screen eats most of the viewport before any results show.
+- **Proposal:** responsive NavBar (collapse to a menu < md); on mobile, collapse SubBar's advanced
+  rows behind a "Filters" toggle (keep always-visible on desktop per the T24 decision). NEW (mobile);
+  pairs with T11/T12.
+
+### U5 🟡 — Inconsistent loading / empty / error states
+Loading is a skeleton on some pages (`ListSkeleton`/`CardSkeleton`) but plain "Loading…" /
+`animate-pulse` text on calendar and `/foryou`; empty states are bespoke per page; quick-action
+errors from `useQuickActions` aren't surfaced (no toast) while settings has its own inline notice.
+- **Proposal:** shared `<EmptyState>` + consistent skeletons + a lightweight global toast for
+  rate/wishlist failures. NEW; pairs with T11.
+
+### U6 🟡 — Accessibility: icon-only controls lack labels; weak focus-visible
+View toggles (`≡ ⊞ ▦`), sort `select`, clear `×`, the `/foryou` `✕`/`♥`, and the facet popover
+toggle are icon/symbol-only; some have `title` but no `aria-label`, and most buttons have no visible
+focus ring (only inputs set `focus:border`). Keyboard + screen-reader users are under-served.
+- **Proposal:** add `aria-label`s, a global `focus-visible` ring, and ensure tab order. NEW;
+  overlaps **A7** (react-hooks errors are in the same components).
+
+### U7 🟡 — Images: native `<img>`, silent failure, no lazy/responsive
+All posters use native `<img>` with `onError → display:none` (broken images just vanish, leaving a
+blank tile) instead of a placeholder, and aren't `next/image` (no lazy-load/responsive sizing).
+Posters are the heaviest content on every grid. (Also the standing `@next/next/no-img-element`
+lint warnings.) NEW; pairs with T11/T13.
+
+### U8 🔴 — Detail page density & scattered ratings (T13)
+`item/page.tsx` (~790 lines) shows people as plain text rows (now `FacetLink`s, T7), **no profile
+pictures**, and the user's rating, per-platform ratings, and crowd scores are in **separate**
+sections rather than co-located. Hard to scan vs. TMDB/Letterboxd/IGDB. This is exactly **T13**
+(card-view people w/ photos, co-locate user+source rating, reuse Insights tag color-coding) and
+**A3** (split the monolith + drop the duplicated `PLATFORM_CONFIG`).
+
+### U9 🟡 — Back-navigation loses state (T12)
+Returning from the detail page to Wishlist/Library/Discover loses filters, sort, scroll position,
+and the calendar's month (only Taste Match had a sessionStorage cache, now removed). This is **T12**;
+it's more visible now that filters/sort/search carry more state. Confirms T12's priority.
+
+### U10 🟢 — Source color-coding still used meaningfully in Settings
+Settings uses `SOURCE_COLORS` as provider identity (connect buttons, avatars) — that's legitimate
+and should **stay**. So "remove source color-coding" (T11) should be scoped to **item cards/rows**,
+not a global purge. Note for T11 scope.
+
+### U11 🟢 — Native `confirm()` for disconnect; no undo
+Disconnect uses a blocking native `confirm()` ([settings/page.tsx:61](src/app/settings/page.tsx:61)) —
+jarring vs. the app's styled modals (the RAWG connect modal shows the house style). Use an in-app
+confirm dialog. NEW (polish).
+
+### U12 🟢 — Low-contrast secondary text
+Heavy use of `text-neutral-600`/`-700` on `neutral-950` (e.g. "TBA", day-of-week, dividers) is below
+WCAG AA in places. Audit secondary-text contrast. NEW (polish); fold into T11/T13 styling.
+
+### U13 🟢 — No shared Button/Chip primitives → style drift
+Button/chip styling (`text-xs px-3 py-1.5 bg-neutral-800 …`) is copy-pasted across ~every page, so
+variants already differ subtly. A tiny `<Button>`/`<Chip>` set would lock consistency and shrink the
+JSX. NEW; pairs with **A5/A6** cleanup.
+
+### Visual pass (live screenshots, 2026-06-14)
+Drove the running app (logged in as a real user) across Discover / Library / Wishlist / Insights /
+For You / Item-detail at desktop width. Two NEW findings + confirmations below.
+(**Mobile not validated** — the browser resize didn't reflow the captured viewport below the `lg`
+breakpoint, so U4's mobile claims remain code-based; worth a real device/devtools check.)
+
+- **U14 🟡 NEW — the month side-nav doesn't scale to long-range lists.** On Library (releases span
+  1991→2027) the right-hand month scrubber becomes a tall, cramped single column of ~every month
+  (`Nov 91, Jan 94, Jan 95, Feb 96, …` ↓ dozens). It's designed for the ~18-month browse timeline,
+  not a multi-decade library. **Proposal:** group the nav by **year (or decade)** when the span is
+  large; only go month-granular within a short window. ([GroupedView.tsx](src/components/GroupedView.tsx) `MonthNav`). Feeds T11/T12.
+- **U15 🟡 NEW — game cover art (landscape) is forced into the 2:3 portrait card → ugly crops.**
+  Movies/shows have true portrait posters, but games use **landscape** Steam/RAWG header art; the
+  poster card (and the `/foryou` swipe card) `object-cover` it into a tall frame, slicing the title
+  (e.g. "Garry's Mod" → "rry's m"; Worms/Pokémon boxes mis-cropped). **Proposal:** detect art aspect
+  (or per-type) and either letterbox games on a blurred bg or use a landscape tile for games. Feeds
+  **T11** (+ /foryou).
+- **Confirmations:** U2/U3 — cards show a ★rating badge + OWNED/PLAYED status text but **no type
+  icon** and no distinct wishlist/library corner icon (status is text-only; source dots only when
+  wishlisted). U8 — on the detail page the crowd scores sit by the title while **"Rate & Log" (your
+  score) is far down a separate section** (not co-located). The unified filter bar **is** consistent
+  across Discover/Library/Wishlist (T24 ✓), and Library/Wishlist now show proper skeletons.
+- **Refinements:** the detail page is in **better shape than U8 implied** — it already has score
+  badges, facts grid, screenshot strip, trailer; T13's real wins are (a) co-locate your rating with
+  crowd scores and (b) people-with-photos for movies/shows. Also confirmed dev/publisher **do**
+  appear on the live detail page (so **D9** is strictly about *stored* data for Insights/facets, not
+  the detail view). Insights and For You look strong as-is.
+
+### Suggested Phase-3 execution order (from this review)
+1. **T11** (cards/list: type tag+icon, drop source color from cards, wishlist/library icons, touch
+   actions [U1–U3], image placeholders [U7]) — highest visible payoff.
+2. **T13 + A3** (detail redesign + split monolith [U8]) — the other big surface.
+3. **T12** (back-nav state cache [U9]).
+4. Cross-cutting polish: **U4** (mobile nav/bar), **U5** (states/toasts), **U6 + A7**
+   (a11y + react-hooks), **U13/A5/A6** (shared primitives), **U11/U12** (confirm dialog, contrast).
+
+> Open question for review: want me to do a **live visual pass** (drive the running dev server +
+> screenshots of each page, desktop + mobile widths) to validate/extend these before executing T11?
+
+---
+
+## Part IV — Productionization readiness review (T19)
+
+Target (confirmed 2026-06-18): **public website first, Android as a PWA/TWA wrapper** of that
+same site. Findings are id'd `P#`; nothing here is applied. Same severity/effort legend as above.
+
+**Overall verdict:** the app is a **single-node, single-disk, always-on-Node** application today,
+and that's the *only* shape the current code supports. It's a clean fit for one small VPS/container
+with a persistent volume — but it is **not** serverless- or multi-instance-ready, and the README's
+"Deploy on Vercel" is actively misleading (`better-sqlite3` + a local file won't run there). The
+single biggest decision (P1) is *which hosting model you commit to*, because most other findings
+branch on it. Nothing here is a code-quality problem — the app runs — it's the gap between "runs on
+my machine" and "survives a public, multi-user internet."
+
+### Section A — Website launch
+
+#### P1 🔴 L — SQLite local-file DB is single-node only; pick the hosting model first
+`better-sqlite3` is a **synchronous native module** writing to `data/rr.db` on local disk (WAL).
+Consequences: (1) **no serverless / edge** (Vercel/Netlify functions can't keep a file handle or a
+warm process — rules out the README's suggestion); (2) **no horizontal scaling** — one writer lock,
+one disk, so you cannot run two instances against the same data; (3) a **persistent volume** is
+mandatory (the file must survive restarts/redeploys). For the expected scale (you + a handful of
+users) this is *fine* on one always-on host. Two paths:
+- **(a) Commit to single-instance hosting** (Fly.io / Railway / a VPS) with a mounted volume +
+  backups (P5). Lowest effort, matches the code as-is. **Recommended for launch.**
+- **(b) Migrate to Postgres** for real multi-instance scale. Large: rewrites `db.ts`, every
+  `query/get/run` call site, the migration runner, and the in-memory caches (P2). Only worth it if
+  you expect real traffic. **Decide P1 before P2/P4/P5/P6** — they all depend on the answer.
+
+#### P2 🔴 M — In-memory module caches assume one long-lived process
+~10 module-level `new Map()` caches: per-user **feed cache** (`liveDiscover.ts`, 45-min TTL), taste
+**profiles** (`discovery.ts`), TMDB **person/company id** lookups (`discovery.ts`, `facetDetail.ts`),
+facet/keyword caches (`tagDiscover.ts`). On one instance these are a *feature*. Problems for prod:
+(1) **multi-instance → inconsistent per node** (P1b); (2) **serverless → cold every invocation**, so
+the feed re-pays all its TMDB/RAWG detail fetches each time → latency + blows third-party rate
+limits; (3) several are **unbounded with no eviction** (`_personIdCache`, `_tmdbCompanyCache`,
+`_keywordCache` grow forever) → slow memory creep on a long-lived process. If you stay single-instance
+(P1a), just add **bounded eviction/TTL**. If you scale (P1b), move them to **Redis** or drop them.
+
+#### P3 🔴 M — `JWT_SECRET` silently falls back to a hardcoded, source-controlled default
+`session.ts`: `process.env.JWT_SECRET || "change-this-in-production-rr2"`. If the env var is missing
+in production, **every session is signed with a public secret** → anyone can forge a JWT for any
+`userId` and impersonate any account. Must **fail-fast at boot** when unset in production rather than
+degrade silently. (Cross-listed to T21 security.)
+
+#### P4 🔴 M — No deployment artifact or documented process model
+No Dockerfile, no `output: "standalone"` in `next.config.ts`, no Procfile/CI, and the README is
+untouched create-next-app boilerplate. `npm start` (`next start`) needs a **persistent Node process**;
+nothing documents the host, how the `data/` volume is mounted, how env is injected, or how the native
+`better-sqlite3` binary is rebuilt for the runtime image. Need: a multi-stage **Dockerfile**
+(`output: "standalone"`, rebuild better-sqlite3 for the target), a documented host (ties to P1), env
+injection, and a real README/runbook replacing the boilerplate.
+
+#### P5 🔴 M — No backup / restore story
+All user data is one `data/rr.db` file. The only snapshots are manual `.bak-*` files from migrations
+(good discipline — Phase 1.5) but there's **no automated backup, no off-host copy, no tested restore**.
+Lost disk = total data loss. Need scheduled backups (e.g. **litestream** streaming to object storage,
+or cron `sqlite3 .backup`) + a documented, *tested* restore procedure. Hard dependency on P1's volume.
+
+#### P6 🟡 M — Synchronous in-request sync can exceed platform timeouts
+`POST /api/sync` `await`s `syncProviders` (pulls **every** connected provider's full wishlist +
+library, ingests + merges) inside the request, and the dashboard auto-fires it when sync is stale.
+For large accounts (the D9 backfill saw **700+ game items**) this is many sequential external calls →
+the request can blow past proxy/PaaS timeouts (typically 30–60s; serverless far less). Need a
+**background job/queue** (or at least a server-side time budget + streamed progress) before public use.
+
+#### P7 🟡 M — No rate limiting / abuse protection
+No middleware, no per-IP/per-user throttle. Data routes are `withUser`-gated, but: account creation is
+open (any OAuth connect), and the gated routes **proxy third-party APIs with *your* keys**
+(`/api/discover?q=`, `/api/search`, `/api/detail/*` all hit TMDB/RAWG/Trakt/IGDB). An abusive client
+can **exhaust your third-party quotas and run up cost**. Add rate limiting (middleware or a platform
+WAF/edge limit) before exposing it publicly. (Cross-listed to T21.)
+
+#### P8 🟡 M — Third-party fetches have no timeout / retry / circuit-breaker
+Adapters call `fetch()` directly — no `AbortSignal.timeout`, no retry/backoff. A slow or hung upstream
+blocks the request indefinitely (and via P6, the whole sync). One flaky provider degrades everything.
+The discover *feed* tolerates an empty source, but **detail and sync are not isolated** against a
+stalled provider. Add per-fetch timeouts + bounded retries + per-source failure isolation.
+
+#### P9 🟡 S — Observability is `console.log` only; no health check, no error tracking
+~20 `console.log/error` statements, nothing structured, no Sentry/aggregation, and **no `/api/health`**
+(liveness/readiness probe for the host or uptime monitor). A production 500 (the `withUser` catch)
+just vanishes into stdout. Add: a health endpoint, an error tracker, and structured request logging.
+
+#### P10 🟡 S — Config read ad-hoc, no boot-time validation
+`process.env.X!` / `|| fallback` scattered across modules (`TMDB_API_KEY!`, `RAWG_API_KEY!`, …). A
+missing key fails deep inside a request rather than at startup. `.env.example` is solid, but add a
+**single validated config module** that throws at boot listing every missing required var (and folds
+in P3's fail-fast).
+
+#### P11 🟡 S — Posters are native `<img>` from third-party CDNs (also U7)
+`next.config` declares `images.remotePatterns` but **no code uses `next/image`** — every poster is a
+raw `<img>` hotlinked to tmdb/rawg/steam CDNs. No optimization/resizing/bandwidth control; a CDN
+policy change or outage = broken images app-wide; and it complicates the PWA offline story (P14).
+Functional today, so lower priority — but relevant to cost, perf, and the Android wrapper.
+
+#### P12 🟡 S — No SEO / discoverability primitives (website-specific)
+No `robots.txt`, no sitemap, no `metadata`/Open Graph (pages are `"use client"` with minimal server
+metadata), no canonical URLs. A public website wanting organic traffic / shareable links needs these.
+
+#### P13 🟢 M — Client-only pages + query-param item URLs hurt shareability & first paint
+Every page is `"use client"` and fetches on mount; `/item` identity is built into **query params**
+client-side. For a public site: no SSR for shareable/crawlable links, weaker SEO, and a loading
+spinner on every cold visit. Consider server components + clean route params (`/item/[id]`) for at
+least the detail page.
+
+### Section B — Android (PWA / TWA) — depends on the website being live
+
+#### P14 🟡 M — No PWA manifest or service worker → can't wrap as a TWA yet
+The standard "website → Play Store" path is a **Trusted Web Activity**, which requires an installable
+PWA: a valid web manifest (name, icons 192/512, `theme_color`, `display: standalone`, `start_url`) and
+a service worker over HTTPS. **None exist.** This is the entry ticket for the Android target and
+confirms the **website-first** sequencing — it's built on top of a live site (P1–P13).
+
+#### P15 🟡 S — Digital Asset Links + stable HTTPS origin required for TWA
+Play Store TWA needs `/.well-known/assetlinks.json` binding the Android signing key to the web origin,
+plus the site on a fixed HTTPS domain. Trivial to add once the **production domain + signing key**
+exist — but a hard dependency on P4's finalized host decision.
+
+#### P16 🟢 M — Verify the OAuth + cookie flow inside the wrapped app
+Auth is OAuth redirects + an httpOnly `sameSite=lax` cookie. In a TWA (Chrome Custom Tab) the cookie
+usually carries, but: redirect URIs in `.env.example` are hardcoded to `localhost` and must be
+re-registered per provider for the production origin; some providers misbehave in webviews; and the
+deep-link return / `sameSite` may need attention. Test each provider end-to-end inside a TWA before
+shipping.
+
+### Forward-flags to T21 (security)
+Surfaced during this review, deferred to the security pass: **P3** (JWT default secret), **P7**
+(rate limiting / quota abuse), plus **OAuth `access_token`/`refresh_token` stored apparently
+plaintext** in `user_identities`, and the **RAWG password** path (`bcrypt`-hashed at
+`api/auth/rawg` — one-way, so worth confirming how RAWG is actually authenticated downstream).
+
+### Recommended execution order (T19)
+1. **P1** — decide the hosting model (single-instance vs Postgres). Everything below branches on it.
+2. **P3** — JWT fail-fast (tiny, security-critical, do immediately regardless of P1).
+3. **P4 + P5** — Dockerfile/`standalone` + documented host + automated backups & tested restore.
+4. **P10 + P9** — config validation at boot; health endpoint + error tracking.
+5. **P6 + P7 + P8** — background sync, rate limiting, fetch timeouts (operability/cost/abuse).
+6. **P2** — cache eviction (single-instance) or shared cache (if P1b).
+7. **P11 + P12 + P13** — image strategy, SEO, SSR/clean URLs (website polish).
+8. **P14 → P16** — PWA manifest/SW → asset links → TWA auth verification (Android, last).
+
+> This is a review doc — nothing applied. Next Phase-5 task is **T21 (security analysis)**; this
+> review's forward-flags feed into it. Suggest reviewing Part IV together before executing any P#.
+
+---
+
+## Part V — Security analysis (T21)
+
+Threat model: **public launch** as a website + Android (PWA/TWA) wrapper, multi-user, internet-exposed,
+attacker can hit any endpoint and craft any request. Findings id'd `S#`. Nothing here is applied
+(except **P3**, the JWT-secret fail-fast, which was fixed during execution on 2026-06-18). Same
+severity/effort legend.
+
+**Overall verdict:** the **fundamentals are sound** — every SQL query is parameterized
+(`better-sqlite3`, no string-built SQL → no SQL injection found); no `dangerouslySetInnerHTML`/`eval`
+and React auto-escaping keep the XSS surface minimal; Steam OpenID is **properly verified** (a
+`check_authentication` round-trip to Steam, not the naive "trust the claimed id" variant);
+`/api/auth/me` does **not** leak tokens to the client; the session cookie is `httpOnly` + `sameSite=lax`
++ `secure`-in-prod (lax gives reasonable CSRF protection for the JSON POST routes). The real risks are
+**credential handling at rest** (S2/S5), **account-linking not bound to the session** (S1), and the
+**missing public-internet hardening** (rate limiting S3, security headers S6, session revocation S4)
+that a single-user local app never needed.
+
+### 🔴 High
+
+#### S1 — OAuth/OpenID account-linking is not bound to the session (CSRF / forced linking)
+The link target is taken from **attacker-controllable, unauthenticated input**, not the server session:
+- Trakt/TMDB/Letterboxd: `state` is base64 **JSON `{userId, ts}`** — *unsigned*, no integrity, and the
+  callback (`oauthConnect.ts`) trusts `state.userId` as the account to link the resolved identity to.
+  `ts` is never checked (no expiry/replay protection).
+- Steam: the callback reads `?link=<userId>` straight from the query string.
+
+There is **no random state nonce tied to a cookie/session**, so the OAuth round-trip can't detect a
+forged or replayed callback. Consequences: login-CSRF / **forced account linking** — an identity can be
+attached to a `userId` the initiator doesn't own, and the connect flow can be CSRF-triggered against a
+logged-in victim. (Mitigating factor: `userId`s are random UUIDs, not enumerable — but the design
+should never trust a client-supplied userId for an authz decision.) **Fix:** derive the link target
+**only from the server session**, and protect the round-trip with a random `state` nonce stored in a
+short-lived httpOnly cookie and verified on callback (drop `userId`/`link` from the URL entirely).
+
+#### S2 — OAuth access/refresh tokens stored plaintext at rest
+`user_identities.access_token` / `refresh_token` are written and read in the clear (`oauthConnect.ts`,
+`rawg/route.ts`). Combined with the single-file SQLite DB and **no backup encryption** (Part IV P5), any
+read of `data/rr.db` (host compromise, leaked backup, stray copy) hands an attacker **full read+write
+access to every user's connected Trakt/TMDB/RAWG account**. **Fix:** encrypt tokens at rest with an
+app-level AEAD (key from env/KMS, separate from `JWT_SECRET`); decrypt only in memory at use. At minimum,
+lock down DB-file perms + encrypt backups.
+
+#### S3 — No rate limiting on auth + API-key-proxying endpoints (= P7)
+No throttle anywhere. `/api/auth/rawg` takes **email + password** → unthrottled **credential brute-force /
+stuffing**. The `withUser` data routes proxy TMDB/RAWG/Trakt/IGDB with **your** keys
+(`/api/discover?q=`, `/api/search`, `/api/detail/*`) → an authenticated abuser can exhaust your
+third-party quotas and run up cost. **Fix:** per-IP + per-account rate limits (middleware / platform
+WAF), strictest on the password endpoint. Shared with Part IV P7.
+
+### 🟡 Medium
+
+#### S4 — JWT sessions are stateless and unrevocable
+30-day expiry; `logout` only clears the cookie; `disconnect` doesn't invalidate sessions. A **stolen
+token stays valid for 30 days** with no server-side kill switch. **Fix:** shorter access-token lifetime
++ refresh, or a server-side session/revocation store (a `sessions` table, or a per-user token-version
+claim checked on each request).
+
+#### S5 — RAWG stores a bcrypt hash of the user's password — pointless and harmful
+`rawg/route.ts` stores `bcrypt(password)` in `metadata`, but it's **never used** — auth uses the `token`
+returned by `rawgLogin` (which is itself stored as `access_token`). So the hash is dead weight *and* an
+**offline-crackable hash of the user's RAWG password** (commonly reused elsewhere) sitting in the DB.
+The UI's "Your password is encrypted before storage" is misleading (the *real* credential, the token, is
+plaintext — see S2). **Fix:** **don't store the password or its hash at all**; keep only the token
+(encrypted per S2).
+
+#### S6 — No security headers
+No middleware / `headers()` config → missing **CSP, HSTS, X-Content-Type-Options,
+X-Frame-Options/`frame-ancestors`, Referrer-Policy**. Public-website clickjacking, MIME-sniffing, and
+transport-downgrade gaps. **Fix:** set them via `next.config` `headers()` or middleware; CSP must allow
+the poster CDN hosts (ties to Part IV P11's `next/image` work).
+
+#### S7 — Missing ownership check on `watchlist` DELETE (authz invariant)
+`DELETE /api/watchlist` accepts an arbitrary `mediaItemId` and issues platform-removal calls
+(`media_links` for that id) **without verifying the item is on the caller's watchlist** — the local
+delete is correctly scoped to `session.userId`, but the provider-side write-back loop runs first on a
+caller-supplied id. Impact is bounded to the caller's own linked accounts/tokens, so it's not a
+cross-user breach, but it's a missing authz invariant + lets a user act on arbitrary media-item ids.
+**Fix:** assert the `mediaItemId` belongs to `session.userId` before any action, and do a quick
+**systematic authz pass** confirming every read/write route scopes by `session.userId` (spot-checks so
+far — me/library/disconnect/watchlist-local — all do).
+
+#### S8 — No schema validation at the API boundary
+Routes use `await req.json()` with ad-hoc presence checks; malformed/wrong-type input becomes a 500 or
+type-confusion deep in a handler. **Fix:** validate each route body with a schema (e.g. zod) at the
+boundary; reject with 400 + a generic message.
+
+#### S9 — Error-message leakage on `/api/auth/rawg`
+Returns the upstream `e.message` (`rawgLogin` failure) verbatim to the client — can expose internal /
+third-party detail. (The shared `withUser` path is already generic — this route predates it.) **Fix:**
+generic client message, log detail server-side.
+
+### 🟢 Low
+
+#### S10 — Dependency posture
+`npm audit` (prod deps): **2 moderate** — PostCSS "XSS via unescaped `</style>` in stringify output",
+pulled in transitively by Next's bundled toolchain. Build-time, low runtime risk for this app; the
+suggested fix is a **Next downgrade — do NOT apply**. **Fix:** add `npm audit` to CI + Dependabot/Renovate
+and adopt a clean Next patch when available.
+
+#### S11 — JWT payload is signed, not encrypted
+The session token is readable (base64) by anyone holding it and includes `displayName`. Not currently
+sensitive, but **keep the payload minimal** — never add emails/tokens/PII to it.
+
+#### S12 — Stored `posterUrl` is unvalidated and reflected as `<img src>`
+`watchlist` POST accepts a client `posterUrl`, stores it, and it's later rendered as an image source.
+Browsers don't execute `javascript:` in `img src` and the server never fetches it (no SSRF), so impact
+is low — but **validate it's an `https://` URL on an allowed CDN host** (pairs with the S6 CSP `img-src`).
+
+#### S13 — IGDB query built by string interpolation (light escaping)
+`searchIgdbGames` builds an Apicalypse query with `search "${title.replace(/["\\]/g," ")}"`; numeric
+args are `Math.floor`'d. Low risk, but prefer stricter input sanitization / a query builder for the
+non-parameterized IGDB API.
+
+### Confirmed-good (don't re-litigate)
+Parameterized SQL throughout (no SQLi); no `dangerouslySetInnerHTML`/`eval` (minimal XSS surface);
+Steam OpenID verified via `check_authentication`; `/api/auth/me` returns no tokens; session cookie is
+`httpOnly`+`sameSite=lax`+`secure`-in-prod; `disconnect` is `session.userId`-scoped and blocks removing
+the last login; **P3 JWT-secret fail-fast fixed 2026-06-18**.
+
+### Recommended execution order (T21)
+1. **S2 + S5** — encrypt tokens at rest; stop storing the RAWG password hash. (Credentials first.)
+2. **S1** — bind account-linking to the session + add a state nonce. (Auth integrity.)
+3. **S3** — rate limiting, strictest on the password endpoint. (= Part IV P7.)
+4. **S6 + S4** — security headers; session revocation/short expiry.
+5. **S7 + S8** — ownership check + boundary schema validation.
+6. **S9 / S10 / S11 / S12 / S13** — polish + dependency hygiene.
+
+> Review doc — nothing applied beyond P3. Suggest reviewing Parts IV + V together, then executing the
+> combined go-live work (Phase 6 in [TASKS.md](TASKS.md)) in the recommended order.
+
+## Bug tracker archive (both entries resolved)
+
+### ReleaseRadar — Bug Tracker
+
+This file is the **bug collection** — Claude reads/writes here.
+
+---
+
+## Data Bugs
+- ~~Merging wrong movies between databases~~ (Warriors of the Wind, item `17aa124c…`, tmdbId 81) — **NOT A BUG (investigated 2026-06-14).** The item has a single, correct TMDB link (id 81). TMDB itself returns `title: "Warriors of the Wind"` with `original_title: 風の谷のナウシカ` (Nausicaä) and `imdb_id: tt0087544` (Nausicaä) — i.e. one film, with TMDB serving an alternate English title for the configured language. No two movies were merged. → If the localized title is undesirable, that's a TMDB `language`/region concern tied to **T22** (country setting), not the matcher.
+- ~~Studio ratings in Insights missing a lot of data (Bethesda Softworks / Fallout 4)~~ — **investigated 2026-06-14; split in two:**
+  - **(A) display — FIXED:** Insights "Game studios" column filtered to `role==="developer"` only, so publishers (Bethesda Softworks publishes Fallout 4; dev is Bethesda Game Studios) never showed. [InsightsView.tsx](src/components/insights/InsightsView.tsx) `gameStudios` now includes both `developer` + `publisher` (matches the section subtitle).
+  - **(B) data coverage — root cause, → TASKS.md (D9):** only **3% of library games (24/713)** carry any developer/publisher in stored `raw_data`, vs 99% of movies/shows. Game sync persists *list* payloads (Steam owned-games = `appid/name/playtime`; RAWG list lacks `developers/publishers` — those are detail-endpoint-only). Needs the sync/enrich pipeline to fetch+persist game detail (or a backfill). Tracked as **D9**.
+
+## Search Bar Bugs & improvements
+> **Triaged 2026-06-14 → TASKS.md.** Consistency + filter pruning + "search on any filter" → **T24**; the sort-options redesign + sort-driven result layout (rating dividers/scrollbar, calendar only for date sorts) → **T8** (rewritten). Both have full spec blocks under the Phase 2 table. No code changed yet.
+
+- Search bar component remains inconsistent:
+  - when entering a search query in the discovery version it shows
+    - the sort dropdown - sort dropdown not available in wishlist/ library
+    - additional filters (in library, year, etc) → these should be always visibile as part of the filter options above (facet filters, type, source)
+- some filters can be removed: source filter (tmdb, trakt etc), "Community", Runtime
+- the sort options should be adjusted. it should only contain these sort options: 
+  - Release date (newest first), 
+  - Release date (oldest first)
+  - Rating (user rating), 
+  - Rating (platform rating): calculates an average score based on data bases (imdb, tmdb, metacritic, etc), 
+  - Best Match: validates items in the current list based on how well they match the users preferences (might require a "user preference" analysis if not already existing)
+- the sort option should be always available not just after entering a query
+- the items results should adjust based on the sort algorithim:
+  - release date (newest first): current timeline approach (but reversed)
+  - release date (oldest first): current timeline approach
+  - rating: replace month scroll bar on the side with a rating scroll bar, replace month dividers with rating dividers (remove calendar view as view option - keep just list and card view)
+  - best match: normal scroll bar. best match at the top of the list (remove calendar view as view option - keep just list and card view)
+- The search should already start as soon as a filter was applied (remove calendar view as view option - keep just list and card view)
+
+
+---
+
+## Open decisions
+1.
+
+## Changelog
+- _2026-06-14_ — Triaged the 2 logged bugs. Bug 1 (Warriors of the Wind) = not a bug (TMDB alt-title; relates to T22). Bug 2 (studios) = display half fixed in InsightsView (publishers now shown); data-coverage half tracked as **D9** in TASKS.md.
+- _2026-06-14_ — Triaged the Search Bar section → **T24** (consistency + remove source/Community/Runtime filters + search-on-filter) and **T8** (5-option sort set + new platform-avg & user-rating sorts + sort-driven result layout). Specs in TASKS.md.

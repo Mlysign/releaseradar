@@ -17,40 +17,51 @@ A platform can be both. A capability is only claimed when the matching adapter m
 
 ## Status legend
 
-`Implemented` live · `Hidden` built but hidden in UI · `To do` chosen for integration · `To evaluate` candidate, not decided · `Rejected` ruled out
+✅ `Implemented` live · 🔵 `Hidden` built but hidden in UI · ⬜ `To do` chosen for integration · ❔ `To evaluate` candidate, not decided · ❌ `Rejected` ruled out
 
-## All platforms
+## Platforms
 
 Capabilities: **R** read, **W** write, blank = not supported. Rating column for
 metadata providers means score read only. **`*`** marks a capability the platform
 has in its data model but that is not reachable through a supported official API
-(unofficial scraper, closed, or no API — see Notes).
+(unofficial scraper, closed, or no API — see Notes). Split into **Active**
+(actually live in the app) and **Candidates** (evaluated but not built) so a
+session working on existing platforms doesn't have to scan 13 speculative rows
+it doesn't need — only pull in "Candidates" when actually discussing expanding
+to a new platform/media type.
+
+### Active (implemented or hidden)
 
 | Platform | Media | Role | Status | Auth | Wishlist | Library | Rating | Review | Status W | Notes |
 |---|---|---|---|---|---|---|---|---|---|---|
-| Trakt.tv | movie, show | Connectable | Implemented | oauth | R/W | R | R/W | | yes | Rating and watched history are separate. |
-| Steam | game | Connectable | Implemented | openid | R | R | | | | Read-only; wishlist pull only. |
-| RAWG | game | Connectable | Implemented | credentials | R/W | R | R/W | | yes | No review text. |
-| TMDB | movie, show | Connectable | Implemented | oauth | R/W | R | R/W | | | No watched concept; library = rated items. |
-| Letterboxd | movie | Connectable | Hidden | oauth | R/W | R | R/W | R | yes | Hidden until a working API key exists. |
-| IGDB | game | Metadata | Implemented | | | | R | | | Games catalog + community/critic scores. |
-| IMDb | movie, show | Metadata | Implemented ⚠️ | | | | R | | | Rating via OMDB — **inherits the OMDB key gap below** (no scores in prod today). |
-| Rotten Tomatoes | movie, show | Metadata | Implemented ⚠️ | | | | R | | | Critic score, also sourced from OMDB (`Ratings[Source="Rotten Tomatoes"]`) — **inherits the OMDB key gap below**. |
-| Metacritic | movie, show, game | Metadata | Implemented | | | | R | | | Critic score. |
-| OMDB | movie, show | Metadata | Implemented ⚠️ | apikey | | | R | | | Feeds IMDb rating, box office, awards. **⚠️ Config, not code: the `OMDB_API_KEY` is currently invalid, so no IMDb/RT scores actually land in prod.** Check this before debugging a missing rating. |
-| Hardcover | book (+ audiobook format) | Connectable + Metadata | To do | token (OAuth TBC) | R/W | R | R/W | R/W | yes | Best books connector; modern free GraphQL API. Doubles as books database provider. Risk: multi-user auth flow unconfirmed (see deep dive). |
-| Open Library | book | Metadata (+ light write) | To do | account | R/W | R | | | partial | Free open catalog + covers; primary books metadata source. |
-| AniList | anime, manga | Connectable + Metadata | To do | oauth | R/W | R | R/W | R | yes | Full write mutations; extends the show model. |
-| Google Books | book | Metadata | To evaluate | apikey / oauth | W | R | | | | Bookshelf write is dated; secondary metadata only. |
-| StoryGraph | book | Connectable | To evaluate | | | | | | | No official API; only a fragile unofficial cookie scraper. |
-| MyAnimeList | anime, manga | Connectable | To evaluate | oauth | R/W | R | R/W | | yes | Alternative / secondary id source to AniList. |
-| MusicBrainz / Discogs | music | Metadata | To evaluate | | | | | | | Album catalog for a future music type. |
-| Spotify / Last.fm | music | Connectable | To evaluate | oauth | | R | | | | User listening data; weak wishlist/rating semantics. |
-| Podcast Index / Listen Notes | podcast | Metadata | To evaluate | apikey | | | | | | Podcast catalog; little standard write-back. |
-| BoardGameGeek | board game | Metadata (read-only) | To evaluate | token (July 2025) | R public | R public | R | | | XML API2 is read-only (no write-back); collection is async + throttled; opens board games as a new type. See deep dive. |
-| Backloggd | game | Connectable (read) / Metadata | To evaluate | none (scrape) | R* | R* | R* | R* | | Unofficial scraper only (public profiles). Built on IGDB ids → a Backloggd wishlist merges/dedupes cleanly with RAWG. Value = merging a user's Backloggd + RAWG wishlists. Blocker is access method, not data. See deep dive. |
-| Goodreads | book | Connectable | Rejected | oauth (closed) | R/W* | R* | R/W* | R/W* | yes* | Full API existed but closed to new keys since Dec 2020, never reopened. Capabilities unreachable. |
-| Audible / Libro.fm | audiobook | Connectable | Rejected | none (no public API) | R/W* | R* | R/W* | | yes* | No public API (only unofficial/reverse-engineered clients). Model audiobooks as a book format instead. |
+| Trakt.tv | movie, show | Connectable | ✅ Implemented | oauth | R/W | R | R/W | | yes | Rating and watched history are separate. |
+| Steam | game | Connectable | ✅ Implemented | openid | R | R | | | | Read-only; wishlist pull only. |
+| RAWG | game | Connectable | ✅ Implemented | credentials | R/W | R | R/W | | yes | No review text. |
+| TMDB | movie, show | Connectable | ✅ Implemented | oauth | R/W | R | R/W | | | No watched concept; library = rated items. |
+| Letterboxd | movie | Connectable | 🔵 Hidden | oauth | R/W | R | R/W | R | yes | Hidden until a working API key exists. |
+| IGDB | game | Metadata | ✅ Implemented | | | | R | | | Games catalog + community/critic scores. |
+| IMDb | movie, show | Metadata | ✅ Implemented ⚠️ | | | | R | | | Rating via OMDB — **inherits the OMDB key gap below** (no scores in prod today). |
+| Rotten Tomatoes | movie, show | Metadata | ✅ Implemented ⚠️ | | | | R | | | Critic score, also sourced from OMDB (`Ratings[Source="Rotten Tomatoes"]`) — **inherits the OMDB key gap below**. |
+| Metacritic | movie, show, game | Metadata | ✅ Implemented | | | | R | | | Critic score. |
+| OMDB | movie, show | Metadata | ✅ Implemented ⚠️ | apikey | | | R | | | Feeds IMDb rating, box office, awards. **⚠️ Config, not code: the `OMDB_API_KEY` is currently invalid, so no IMDb/RT scores actually land in prod.** Check this before debugging a missing rating. |
+
+### Candidates (to do / to evaluate / rejected)
+
+| Platform | Media | Role | Status | Auth | Wishlist | Library | Rating | Review | Status W | Notes |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Hardcover | book (+ audiobook format) | Connectable + Metadata | ⬜ To do | token (OAuth TBC) | R/W | R | R/W | R/W | yes | Best books connector; modern free GraphQL API. Doubles as books database provider. Risk: multi-user auth flow unconfirmed (see deep dive). |
+| Open Library | book | Metadata (+ light write) | ⬜ To do | account | R/W | R | | | partial | Free open catalog + covers; primary books metadata source. |
+| AniList | anime, manga | Connectable + Metadata | ⬜ To do | oauth | R/W | R | R/W | R | yes | Full write mutations; extends the show model. |
+| Google Books | book | Metadata | ❔ To evaluate | apikey / oauth | W | R | | | | Bookshelf write is dated; secondary metadata only. |
+| StoryGraph | book | Connectable | ❔ To evaluate | | | | | | | No official API; only a fragile unofficial cookie scraper. |
+| MyAnimeList | anime, manga | Connectable | ❔ To evaluate | oauth | R/W | R | R/W | | yes | Alternative / secondary id source to AniList. |
+| MusicBrainz / Discogs | music | Metadata | ❔ To evaluate | | | | | | | Album catalog for a future music type. |
+| Spotify / Last.fm | music | Connectable | ❔ To evaluate | oauth | | R | | | | User listening data; weak wishlist/rating semantics. |
+| Podcast Index / Listen Notes | podcast | Metadata | ❔ To evaluate | apikey | | | | | | Podcast catalog; little standard write-back. |
+| BoardGameGeek | board game | Metadata (read-only) | ❔ To evaluate | token (July 2025) | R public | R public | R | | | XML API2 is read-only (no write-back); collection is async + throttled; opens board games as a new type. See deep dive. |
+| Backloggd | game | Connectable (read) / Metadata | ❔ To evaluate | none (scrape) | R* | R* | R* | R* | | Unofficial scraper only (public profiles). Built on IGDB ids → a Backloggd wishlist merges/dedupes cleanly with RAWG. Value = merging a user's Backloggd + RAWG wishlists. Blocker is access method, not data. See deep dive. |
+| Goodreads | book | Connectable | ❌ Rejected | oauth (closed) | R/W* | R* | R/W* | R/W* | yes* | Full API existed but closed to new keys since Dec 2020, never reopened. Capabilities unreachable. |
+| Audible / Libro.fm | audiobook | Connectable | ❌ Rejected | none (no public API) | R/W* | R* | R/W* | | yes* | No public API (only unofficial/reverse-engineered clients). Model audiobooks as a book format instead. |
 
 ## Key finding: audiobooks are a format, not a platform
 

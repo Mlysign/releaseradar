@@ -44,7 +44,7 @@ list of what's missing.
 `better-sqlite3` is a synchronous, in-process, single-file database. The app therefore runs as
 **one always-on Node process with a persistent disk** — *not* serverless and *not* multi-instance.
 The chosen target is a **single-instance container on [Railway](https://railway.app)** with a mounted
-volume for the DB. (See `TASKS.md` Phase 6 / `IMPROVEMENTS.md` Part IV for the full rationale.)
+volume for the DB. (See `docs/archive/history.md` for the full rationale.)
 
 ## Deploy to Railway
 
@@ -79,7 +79,7 @@ fresh container, and test a restore. Tracked as **P5** in `TASKS.md`.
 ## Project docs
 
 - `STATUS.md` — short human-readable digest of live state + next actions (read this first)
-- `TASKS.md` — execution tracker (source of truth) for what's still open
-- `IMPROVEMENTS.md` — one-paragraph summary of the audit/review findings (data, architecture, UI, productionization, security) — all resolved
-- `docs/archive/` — full history: completed phases, the resolved audit findings, and the closed bug tracker (moved out of the working set 2026-07-18 to keep the active docs short)
-- `AGENTS.md` — contributor notes (this Next.js version has breaking changes; read the bundled docs)
+- `TASKS.md` — execution tracker (source of truth) for what's still open, incl. a one-paragraph summary of the (all-resolved) audit/review findings
+- `docs/archive/history.md` — everything finished: completed phases, resolved audit findings, closed bugs/QA findings (moved out of the working set 2026-07-18 to keep the active docs short — grep it, don't read it end to end)
+- `PLATFORMS.md` — platform integration capability reference
+- `AGENTS.md` — contributor/agent notes: this Next.js version has breaking changes (read the bundled docs), the project doc map, load-bearing data-model invariants, and model/agent-routing guidance
