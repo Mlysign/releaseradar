@@ -12,7 +12,8 @@ import { representativeCommunity, averageCommunity } from "@/lib/ratings";
 import { getUserStateMap } from "@/lib/userState";
 import { extractFacets, Facet, facetId, FacetRole, personKey, companyKey } from "@/lib/facets";
 import { getLibraryFacetAnalysis, librarySignature } from "@/lib/libraryAnalysis";
-import { getScoringConfig, getTagCategories } from "@/lib/scoringConfig";
+import { getScoringConfig, getTagCategories, getTagCategoryOverrides, scoringConfigSignature, TagCategoryConfig } from "@/lib/scoringConfig";
+import { ScoringConfigValues } from "@/lib/scoringDefaults";
 import { MediaLink, MediaType } from "@/types";
 
 // ── Tunables ───────────────────────────────────────────────────────
@@ -203,6 +204,11 @@ export function invalidateDiscoveryCache() { _cache = null; }
 // signal; facets unseen in the catalog fall back to idf 1 at the call site.
 export function getCatalogIdf(): Map<string, number> { return getCache().idf; }
 
+// H5.4 — the taxonomy editor's tag-triage view: every tag in the catalog
+// vocab, sorted by frequency (already the vocab's sort order). Not filtered by
+// category here — the caller (the vocab API route) decides what to show.
+export function getTagVocab(): VocabEntry[] { return getCache().vocab.filter((v) => v.kind === "tag"); }
+
 // ── Preference profile ────────────────────────────────────────────
 // meta's classWeight/BA/n are set for every real (rated-library) facet — H5.2
 // adds them for computeFandexScore's aggregate + explainability. Facets
@@ -236,19 +242,46 @@ const _profileCache = new BoundedCache<string, { sig: string; profile: Profile }
 // until real evidence accumulates, and what makes dislikes (dev_f < 0) emerge
 // with no special-casing.
 //
-// Weight class (§3.2): tags read their category's weight from tag_category and
-// are DROPPED entirely (not just zero-weighted) when that category is
-// ignored — meta/noise today, platform tags once someone buckets them via the
-// taxonomy editor (H5.4). People/company roles keep reading roleWeights
-// (still the ROLE_WEIGHT literal's values, now DB-backed via scoring_config).
-export function buildProfile(userId: string): Profile {
-  const sig = librarySignature(userId);
-  const cached = _profileCache.get(userId);
-  if (cached && cached.sig === sig) return cached.profile;
+// Weight class (§3.2): tags resolve their EFFECTIVE category as
+// `tag_category_override[key] ?? f.category` (D6 — a backend reassignment
+// from the taxonomy editor wins over categorizeTag()'s code heuristic), then
+// read that category's weight from tag_category and are DROPPED entirely
+// (not just zero-weighted) when it's ignored — meta/noise today, anything else
+// someone buckets that way via the taxonomy editor (H5.4). `meta.category`
+// stores the EFFECTIVE id too, so the breakdown UI's color/label matches what
+// was actually scored, not the pre-reassignment category. People/company
+// roles keep reading roleWeights (still the ROLE_WEIGHT literal's values, now
+// DB-backed via scoring_config).
+//
+// `overrides` (H5.4): the /dev/scoring live preview needs to score against
+// DRAFT (unsaved) weights without touching the DB or the shared cache — pass
+// `config`/`categoryWeights` to bypass getScoringConfig()/getTagCategories()
+// for just those fields, layered onto everything else that's still real
+// (the user's actual rated facets, tag_category_override, category
+// id/label/color). Providing overrides always skips the profile cache: its
+// key is userId+librarySignature only, which can't distinguish a draft call
+// from a real one, so caching a draft result would leak into every other read.
+export interface ProfileOverrides {
+  config?: ScoringConfigValues;
+  categoryWeights?: Map<string, { weight: number; ignored: boolean }>;
+}
+
+export function buildProfile(userId: string, overrides?: ProfileOverrides): Profile {
+  const sig = `${librarySignature(userId)}|${scoringConfigSignature()}`;
+  if (!overrides) {
+    const cached = _profileCache.get(userId);
+    if (cached && cached.sig === sig) return cached.profile;
+  }
 
   const a = getLibraryFacetAnalysis(userId);
-  const cfg = getScoringConfig();
-  const categoryById = new Map(getTagCategories().map((c) => [c.id, c]));
+  const cfg = overrides?.config ?? getScoringConfig();
+  const tagOverrides = getTagCategoryOverrides();
+  const categoryById = new Map<string, TagCategoryConfig>(
+    getTagCategories().map((c) => {
+      const w = overrides?.categoryWeights?.get(c.id);
+      return [c.id, w ? { ...c, weight: w.weight, ignored: w.ignored } : c];
+    })
+  );
 
   const w = new Map<string, number>();
   const meta = new Map<string, { kind: string; role?: FacetRole; key: string; label: string; category?: string; classWeight?: number; BA?: number; n?: number }>();
@@ -256,8 +289,10 @@ export function buildProfile(userId: string): Profile {
     const id = `${f.kind}|${f.role ?? ""}|${f.key}`;
 
     let classWeight: number;
+    let effectiveCategory = f.category;
     if (f.kind === "tag") {
-      const cat = categoryById.get(f.category ?? "other");
+      effectiveCategory = tagOverrides.get(f.key) ?? f.category ?? "other";
+      const cat = categoryById.get(effectiveCategory);
       if (cat?.ignored || cat?.weight === 0) continue;
       classWeight = cat?.weight ?? 1;
     } else {
@@ -268,10 +303,10 @@ export function buildProfile(userId: string): Profile {
     const dev = BA - a.baseline;
 
     w.set(id, dev * classWeight);
-    meta.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category: f.category, classWeight, BA, n: f.count });
+    meta.set(id, { kind: f.kind, role: f.role, key: f.key, label: f.label, category: effectiveCategory, classWeight, BA, n: f.count });
   }
   const profile: Profile = { w, meta, baseline: a.baseline, hasSignal: w.size > 0, ratedItemCount: a.ratedItemCount };
-  _profileCache.set(userId, { sig, profile });
+  if (!overrides) _profileCache.set(userId, { sig, profile });
   return profile;
 }
 
@@ -356,9 +391,13 @@ export interface FandexScoreResult { score: number; reasons: Reason[] }
 
 interface FandexContrib { f: Facet; dev: number; classWeight: number; BA?: number; n?: number }
 
-export function computeFandexScore(facets: Facet[], profile: Profile): FandexScoreResult | null {
+// `configOverride` (H5.4 live preview): use the draft mappingConstant/
+// perCategoryCap instead of the persisted ones — pass the SAME override
+// object given to buildProfile so K/cap and the role/category weights that
+// produced `profile` stay consistent with each other.
+export function computeFandexScore(facets: Facet[], profile: Profile, configOverride?: ScoringConfigValues): FandexScoreResult | null {
   if (!profile.hasSignal || profile.ratedItemCount < MIN_RATED_FOR_FANDEX_SCORE) return null;
-  const cfg = getScoringConfig();
+  const cfg = configOverride ?? getScoringConfig();
 
   const matched: FandexContrib[] = [];
   for (const f of facets) {

@@ -78,6 +78,40 @@ export function getTagCategories(): TagCategoryConfig[] {
   return value;
 }
 
+// H5.4 — create or edit a category (the taxonomy editor's CRUD). `sortOrder`
+// defaults to putting a brand-new category at the end of the existing list.
+export function saveTagCategory(cat: { id: string; label: string; color: string; weight: number; ignored: boolean; sortOrder?: number }): void {
+  const existing = get<{ sort_order: number }>(`SELECT sort_order FROM tag_category WHERE id = ?`, [cat.id]);
+  const sortOrder = cat.sortOrder ?? existing?.sort_order ?? getTagCategories().length;
+  run(
+    `INSERT INTO tag_category (id, label, color, weight, ignored, sort_order, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, strftime('%s','now'))
+     ON CONFLICT(id) DO UPDATE SET label = excluded.label, color = excluded.color,
+       weight = excluded.weight, ignored = excluded.ignored, sort_order = excluded.sort_order,
+       updated_at = excluded.updated_at`,
+    [cat.id, cat.label, cat.color, cat.weight, cat.ignored ? 1 : 0, sortOrder]
+  );
+  _categoryCache = null;
+}
+
+// Batch weight/ignored update for the Weights panel (leaves label/color/sortOrder
+// untouched — that's the Taxonomy panel's job).
+export function saveCategoryWeights(updates: { id: string; weight: number; ignored: boolean }[]): void {
+  for (const u of updates) {
+    run(`UPDATE tag_category SET weight = ?, ignored = ?, updated_at = strftime('%s','now') WHERE id = ?`, [u.weight, u.ignored ? 1 : 0, u.id]);
+  }
+  _categoryCache = null;
+}
+
+// ON DELETE CASCADE on tag_category_override.category_id means any tag
+// reassigned to this category reverts to categorizeTag()'s code heuristic
+// (via getEffectiveCategory's ?? fallback) rather than pointing at nothing.
+export function deleteTagCategory(id: string): void {
+  run(`DELETE FROM tag_category WHERE id = ?`, [id]);
+  _categoryCache = null;
+  _overrideCache = null;
+}
+
 // ── tag_category_override ────────────────────────────────────────────
 let _overrideCache: { sig: string; value: Map<string, string> } | null = null;
 
@@ -98,10 +132,40 @@ export function getTagCategoryOverrides(): Map<string, string> {
   return value;
 }
 
-// Exposed for tests / a future writer (H5.4) that wants to force a re-read
-// without waiting on the next signature check.
+// List form for the taxonomy editor's "current overrides" view.
+export function listTagCategoryOverrides(): { tagKey: string; categoryId: string }[] {
+  return [...getTagCategoryOverrides().entries()].map(([tagKey, categoryId]) => ({ tagKey, categoryId }));
+}
+
+export function setTagCategoryOverride(tagKey: string, categoryId: string): void {
+  run(
+    `INSERT INTO tag_category_override (tag_key, category_id, updated_at) VALUES (?, ?, strftime('%s','now'))
+     ON CONFLICT(tag_key) DO UPDATE SET category_id = excluded.category_id, updated_at = excluded.updated_at`,
+    [tagKey, categoryId]
+  );
+  _overrideCache = null;
+}
+
+export function deleteTagCategoryOverride(tagKey: string): void {
+  run(`DELETE FROM tag_category_override WHERE tag_key = ?`, [tagKey]);
+  _overrideCache = null;
+}
+
+// Exposed for tests / the H5.4 write routes to force a re-read without
+// waiting on the next signature check.
 export function invalidateScoringConfigCaches(): void {
   _configCache = null;
   _categoryCache = null;
   _overrideCache = null;
+}
+
+// H5.4 §5: "All config lives in the DB and cache-busts the profile/score
+// caches on save." buildProfile()'s cache is keyed on the user's library
+// signature only — a scoring_config/tag_category/tag_category_override edit
+// changes nothing about the library, so without this, every cached profile
+// (for EVERY user) would keep scoring with the pre-edit weights until each
+// user's library happened to change. Folding this into buildProfile's cache
+// key makes any admin save invalidate every cached profile at once.
+export function scoringConfigSignature(): string {
+  return `${configSignature()}|${categorySignature()}|${overrideSignature()}`;
 }

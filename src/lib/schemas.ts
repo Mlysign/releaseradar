@@ -146,3 +146,42 @@ export const FacetFetchSchema = z.object({
     .optional(),
   types: z.array(zMediaType).optional(),
 });
+
+// ── H5.4 /dev/scoring (admin-only) ────────────────────────────────────────
+const zRoleWeights = z.record(z.string(), z.number());
+
+// PUT /api/dev/scoring — save role weights + C/K/cap.
+export const ScoringConfigPutSchema = z.object({
+  roleWeights: zRoleWeights,
+  priorStrength: z.number().positive(),
+  mappingConstant: z.number().positive(),
+  perCategoryCap: z.number().int().positive(),
+});
+
+// POST /api/dev/scoring/categories — create/edit one tag_category row.
+export const TagCategoryPostSchema = z.object({
+  id: z.string().min(1).max(64).regex(/^[a-z0-9-]+$/, "id must be lowercase-kebab"),
+  label: z.string().min(1).max(64),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/, "color must be a #rrggbb hex value"),
+  weight: z.number().min(0),
+  ignored: z.boolean(),
+});
+
+// PUT /api/dev/scoring/categories — batch weight/ignored save (the Weights
+// panel's "Save weights" button; label/color/id are untouched).
+export const TagCategoryWeightsPutSchema = z.object({
+  updates: z.array(z.object({ id: z.string(), weight: z.number().min(0), ignored: z.boolean() })),
+});
+
+// POST /api/dev/scoring/overrides — reassign one tag key to a category.
+export const TagCategoryOverridePostSchema = z.object({
+  tagKey: z.string().min(1),
+  categoryId: z.string().min(1),
+});
+
+// POST /api/dev/scoring/preview — score a sample item with draft weights.
+export const ScoringPreviewSchema = z.object({
+  config: ScoringConfigPutSchema,
+  categoryWeights: z.array(z.object({ id: z.string(), weight: z.number().min(0), ignored: z.boolean() })),
+  itemId: z.string().optional(),
+});
