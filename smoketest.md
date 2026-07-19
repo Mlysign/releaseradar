@@ -149,6 +149,23 @@ Insights, Settings), desktop + mobile. Screenshot evidence for each finding.
 30. **More (open-ended)**: anything a demanding user would grumble about — loading/skeleton
     states, focus visibility for keyboard nav, empty states, spacing rhythm, icon-only
     buttons without labels/tooltips. Log with screenshots; user makes final taste calls.
+31. **Cross-surface consistency diff** (added 2026-07-19 — the user found Q14/Q15 that the
+    sweeps missed): the same conceptual view rendered on different pages must match. Put the
+    card grid on Discover, Library/Wishlist, and a facet page side by side (screenshots) and
+    diff: card aspect/height, media-type indicator, quick actions, sort UI, badges (Fandex
+    Score), dividers/scrubber. Same for list view. Any divergence not obviously
+    context-dependent (platform rating, date formatting, person role) is a finding.
+32. **Discover filter × sort matrix** (missed Q16/Q17): don't test filters and sorts in
+    isolation. Combine each sort with hide-in-library + hide-on-wishlist, and tag-include
+    filters with both hides — watch result COUNTS across pages (a shrinking page = post-slice
+    filtering) and check via `read_network_requests` whether provider queries actually carry
+    the filter, or results are only ever local-catalog matches dressed up as discovery.
+33. **Displayed-math sanity** (missed Q20a): wherever the UI shows a headline number WITH a
+    breakdown (Fandex Score "why", stats), check the parts plausibly compose to the whole.
+    Parts that visibly don't add up are a finding even if the underlying math is correct.
+34. **Distribution sanity, logged-in** (missed Q19): for personalized numbers (Fandex Score),
+    eyeball the spread across a real library — a tight clump (e.g. everything 40–60) or a
+    misleading center is a product finding even when each individual value is "correct".
 
 ## Gotchas learned (2026-07-18 run)
 

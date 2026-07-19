@@ -2,7 +2,7 @@
 
 _Your index of every game, movie & show._ · High-level roadmap. **Full detail + completion history live in [TASKS.md](TASKS.md).**
 
-**👉 Currently: nothing blocking you.** P13b shipped 2026-07-19 (whole library now indexable) along with a batch of QA polish (Q7–Q12, N3, N4 — see TASKS.md). Everything else below is either waiting on you (Android TWA, H3.0/H3.1, legal advice) or not yet scoped (H1). H3 + H4 are now scoped — see TASKS.md.
+**👉 Currently: your QA batch is fixed, needs your login to verify.** All 9 findings from your 2026-07-19 logged-in pass (**Q14–Q22** — card-grid unification, two Discover filter bugs, Fandex Score recenter + additive breakdown, tag/Insights admin features) are implemented, tested (250 tests + typecheck clean), and browser-verified anonymously — see TASKS.md for the full list. **Please log in and eyeball**: Library/Wishlist cards, the Fandex Score "Why?" breakdown, and the admin-only controls on `/tag` pages + Insights. Before that: P13b shipped 2026-07-19 (whole library indexable) + QA polish Q7–Q12/N3/N4. Everything else is either waiting on you (Android TWA, H3.0, legal advice) or not yet scoped (H1).
 
 ---
 
