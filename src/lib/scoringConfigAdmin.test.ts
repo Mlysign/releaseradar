@@ -44,8 +44,8 @@ beforeEach(() => {
 
 describe("scoringConfig write paths", () => {
   it("saveScoringConfig persists and busts the cache", () => {
-    saveScoringConfig({ ...DEFAULT_SCORING_CONFIG, mappingConstant: 25 });
-    expect(getScoringConfig().mappingConstant).toBe(25);
+    saveScoringConfig({ ...DEFAULT_SCORING_CONFIG, mappingConstantUp: 25 });
+    expect(getScoringConfig().mappingConstantUp).toBe(25);
   });
 
   it("saveTagCategory creates a new category and saveCategoryWeights batch-edits weight/ignored only", () => {
@@ -121,13 +121,17 @@ describe("buildProfile/computeFandexScore overrides param (H5.4 live preview)", 
     const realProfile = buildProfile(USER);
     const realScore = computeFandexScore([{ kind: "tag", key: "action", label: "Action", category: "genre" }], realProfile)!.score;
 
-    const draftConfig = { ...DEFAULT_SCORING_CONFIG, mappingConstant: DEFAULT_SCORING_CONFIG.mappingConstant * 4 };
+    const draftConfig = {
+      ...DEFAULT_SCORING_CONFIG,
+      mappingConstantUp: DEFAULT_SCORING_CONFIG.mappingConstantUp * 4,
+      mappingConstantDown: DEFAULT_SCORING_CONFIG.mappingConstantDown * 4,
+    };
     const draftProfile = buildProfile(USER, { config: draftConfig });
     const draftScore = computeFandexScore([{ kind: "tag", key: "action", label: "Action", category: "genre" }], draftProfile, draftConfig)!.score;
 
     expect(draftScore).not.toBe(realScore);
     // The persisted config is untouched — nothing was saved.
-    expect(getScoringConfig().mappingConstant).toBe(DEFAULT_SCORING_CONFIG.mappingConstant);
+    expect(getScoringConfig().mappingConstantUp).toBe(DEFAULT_SCORING_CONFIG.mappingConstantUp);
     // A subsequent REAL (non-override) call isn't corrupted by the draft one.
     expect(buildProfile(USER)).toBe(realProfile); // same cached object, not recomputed with draft values
   });

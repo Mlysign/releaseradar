@@ -120,6 +120,48 @@ describe("computeFandexScore — aggregate (H5.2)", () => {
     expect(computeFandexScore(facets, profile)!.score).toBe(100);
   });
 
+  it("Q20: center is the user's own baseline×10, and center + Σ contributions == score (additive breakdown)", () => {
+    const facets: Facet[] = [
+      { kind: "tag", key: "a", label: "A", category: "genre" },
+      { kind: "tag", key: "b", label: "B", category: "theme" },
+      { kind: "person", key: "c", role: "director", label: "Director C" },
+    ];
+    const profile: Profile = {
+      w: new Map([["tag||a", 1.4], ["tag||b", -0.6], ["person|director|c", 2.1]]),
+      meta: new Map([
+        ["tag||a", meta({ key: "a", label: "A", category: "genre", classWeight: 1 })],
+        ["tag||b", meta({ key: "b", label: "B", category: "theme", classWeight: 1 })],
+        ["person|director|c", meta({ key: "c", role: "director", label: "Director C", classWeight: 1.3 })],
+      ]),
+      baseline: 7.2, hasSignal: true, ratedItemCount: 10,
+    };
+    const result = computeFandexScore(facets, profile)!;
+    expect(result.center).toBeCloseTo(72, 6); // baseline 7.2 × 10, NOT a fixed 50
+    const sumContributions = result.reasons.reduce((acc, r) => acc + r.contribution, 0);
+    expect(result.center + sumContributions).toBeCloseTo(result.score, 1);
+  });
+
+  it("Q20: additivity still holds when clamping caps the score (contributions scale down with it)", () => {
+    const facets: Facet[] = [
+      { kind: "tag", key: "a", label: "A", category: "genre" },
+      { kind: "tag", key: "b", label: "B", category: "theme" },
+    ];
+    const profile: Profile = {
+      // baseline 9 (center 90) + a strongly positive dev would blow past 100
+      // without clamping — the two reasons must still sum to score - center.
+      w: new Map([["tag||a", 8], ["tag||b", 6]]),
+      meta: new Map([
+        ["tag||a", meta({ key: "a", label: "A", category: "genre", classWeight: 1 })],
+        ["tag||b", meta({ key: "b", label: "B", category: "theme", classWeight: 1 })],
+      ]),
+      baseline: 9, hasSignal: true, ratedItemCount: 10,
+    };
+    const result = computeFandexScore(facets, profile)!;
+    expect(result.score).toBe(100); // clamped
+    const sumContributions = result.reasons.reduce((acc, r) => acc + r.contribution, 0);
+    expect(result.center + sumContributions).toBeCloseTo(100, 1);
+  });
+
   it("per-category cap: only the top-N |dev| tags per category count toward the aggregate", () => {
     // 5 "theme" tags, cap defaults to 3 — the two weakest (by |dev|) must be
     // excluded from the weighted mean, or a facet-dense item would inflate itself.

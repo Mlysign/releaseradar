@@ -140,6 +140,7 @@ export const GET = withUser(async (req: NextRequest, session) => {
       resolvedMediaItemId: mediaItemId,
       onAnyList,
       fandexReasons: fandex?.reasons ?? [],
+      fandexCenter: fandex?.center ?? null,
       fandexColdStart,
       ...(debug ? { debug } : {}),
     });

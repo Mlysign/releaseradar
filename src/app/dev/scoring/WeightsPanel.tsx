@@ -179,14 +179,25 @@ export default function WeightsPanel({
             </div>
             <div className="space-y-1">
               <label className="flex items-center justify-between gap-2 text-neutral-400">
-                Mapping constant (K)
-                <input type="number" step="1" min="0" className={numInput} value={draftConfig.mappingConstant}
-                  onChange={(e) => setDraftConfig((c) => ({ ...c, mappingConstant: Number(e.target.value) }))} />
+                Mapping constant, above your average (K_up)
+                <input type="number" step="1" min="0" className={numInput} value={draftConfig.mappingConstantUp}
+                  onChange={(e) => setDraftConfig((c) => ({ ...c, mappingConstantUp: Number(e.target.value) }))} />
               </label>
               <p className="text-xs text-neutral-500">
-                Formula: <code className="text-neutral-400">50 + K · weightedDev</code>. Controls how far scores
-                swing from the 50 baseline for a given amount of taste signal. Higher K = more dramatic, spread-out
-                scores; lower K = scores stay clustered closer to 50.
+                Formula: <code className="text-neutral-400">yourAvgRating×10 + K · weightedDev</code>. Applied when an
+                item scores above your own average rating. Higher K_up = a good match swings up more dramatically.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <label className="flex items-center justify-between gap-2 text-neutral-400">
+                Mapping constant, below your average (K_down)
+                <input type="number" step="1" min="0" className={numInput} value={draftConfig.mappingConstantDown}
+                  onChange={(e) => setDraftConfig((c) => ({ ...c, mappingConstantDown: Number(e.target.value) }))} />
+              </label>
+              <p className="text-xs text-neutral-500">
+                Same formula, applied when an item scores below your average. Set lower than K_up to skew the visible
+                range toward enthusiasm — mismatches drop off gently instead of the score reading as "you won&apos;t
+                like this." The center itself (your own average rating, ×10) is not a knob — only these two gains are.
               </p>
             </div>
             <div className="space-y-1">

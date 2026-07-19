@@ -155,7 +155,8 @@ const zRoleWeights = z.record(z.string(), z.number());
 export const ScoringConfigPutSchema = z.object({
   roleWeights: zRoleWeights,
   priorStrength: z.number().positive(),
-  mappingConstant: z.number().positive(),
+  mappingConstantUp: z.number().positive(),
+  mappingConstantDown: z.number().positive(),
   perCategoryCap: z.number().int().positive(),
 });
 

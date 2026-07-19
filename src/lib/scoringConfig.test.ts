@@ -27,9 +27,9 @@ describe("scoringConfig loader (H5.1)", () => {
 
   it("saveScoringConfig persists a change and busts the cache; missing keys still default", () => {
     invalidateScoringConfigCaches();
-    const next = { ...getScoringConfig(), mappingConstant: 42 };
+    const next = { ...getScoringConfig(), mappingConstantUp: 42 };
     saveScoringConfig(next);
-    expect(getScoringConfig().mappingConstant).toBe(42);
+    expect(getScoringConfig().mappingConstantUp).toBe(42);
     // Role weights not present in a saved partial blob still resolve via the default merge.
     expect(getScoringConfig().roleWeights.director).toBe(DEFAULT_SCORING_CONFIG.roleWeights.director);
 

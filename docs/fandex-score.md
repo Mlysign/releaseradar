@@ -53,12 +53,14 @@ Director outweighs a setting tag because `W(director) > W(setting)`, all set fro
 
 ```
 weightedDev = Σ_f [ dev_f · W(class_f) ]  /  Σ_f W(class_f)      // weighted MEAN, not sum
-FandexScore = clamp( 50 + K · weightedDev , 0 , 100 )
+center      = baseline · 10                                     // your own mean rating, 0–10 → 0–100
+K           = weightedDev >= 0 ? K_up : K_down                   // asymmetric gain
+FandexScore = clamp( center + K · weightedDev , 0 , 100 )
 ```
 
 - A **weighted mean** (divide by total weight) keeps facet-dense items from inflating just by carrying more tags. A **per-category cap** (e.g. count at most the top 3 theme tags) further prevents 20 theme tags swamping one director.
-- `50` = "matches your baseline exactly"; `>50` = your taste; `<50` = against it. `K` is a calibration constant (config) that maps rating-scale deviations onto the 0–100 range.
-- Everything here (`C`, all `W`, `K`, the caps) is developer-tunable (§5).
+- **Q19 (2026-07-19, revises the original fixed-50 center):** the center is your own mean rating (the same number Insights shows as "your average"), not a fixed 50 — a fixed center meant roughly half of any library scored below 50 by construction, reading as "you won't like most things." The center is **derived, never a config knob**. `K_up`/`K_down` are separately tunable so an above-average item can swing up faster than a below-average one swings down, skewing the visible range toward enthusiasm.
+- Everything here (`C`, all `W`, `K_up`, `K_down`, the caps) except the center is developer-tunable (§5).
 
 ### 3.4 Explainability payload
 
@@ -114,7 +116,7 @@ A personalized score needs signal. If `profile.hasSignal` is false or below a th
 
 ## 10. Decisions (locked 2026-07-18)
 
-- **D1 — Score semantics: FIXED TRANSFORM.** `FandexScore = clamp(50 + K·weightedDev, 0, 100)`. Deterministic; 50 = matches your baseline. No percentile (a percentile number would drift as the catalog grows).
+- **D1 — Score semantics: FIXED TRANSFORM.** `FandexScore = clamp(center + K·weightedDev, 0, 100)`. Deterministic; center = matches your baseline exactly. No percentile (a percentile number would drift as the catalog grows). **Revised by Q19 (2026-07-19):** center is your own mean rating (×10), not a fixed 50 — see §3.3. `K` is now asymmetric (`K_up`/`K_down`) — still deterministic, still no percentile, just a two-piece linear map instead of one.
 - **D2 — Facet rarity (IDF): DROP from the visible score.** The score is purely *your taste × facet weights* — fully transparent. IDF may remain only as a Discover-*sort* signal, never in the number shown. (`scoreFacets()` must stop applying `idf` when computing the Fandex Score.)
 - **D3 — Aggregate: WEIGHTED MEAN + per-category cap.** Divide by total weight; count at most the top few tags per category. Facet-dense items can't inflate themselves.
 - **D4 — Prior anchor: USER'S OWN BASELINE.** Each facet's Bayesian average shrinks toward the user's personal mean rating `m`. Single-user-clean, no cross-user coupling.

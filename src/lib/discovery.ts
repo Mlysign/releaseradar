@@ -399,7 +399,7 @@ export function scoreFacets(facets: Facet[], w: Map<string, number>, idf: Map<st
 // profile, so §4's hard exclusions (community rating, browsed/popularity,
 // release date) hold structurally — this function has no parameter to leak
 // them through even by mistake.
-export interface FandexScoreResult { score: number; reasons: Reason[] }
+export interface FandexScoreResult { score: number; center: number; reasons: Reason[] }
 
 interface FandexContrib { f: Facet; dev: number; classWeight: number; BA?: number; n?: number }
 
@@ -446,17 +446,39 @@ export function computeFandexScore(facets: Facet[], profile: Profile, configOver
   // facet-dense items from inflating just by carrying more tags (D3).
   const totalWeight = kept.reduce((acc, c) => acc + c.classWeight, 0);
   const weightedDev = totalWeight ? kept.reduce((acc, c) => acc + c.dev * c.classWeight, 0) / totalWeight : 0;
-  const score = Math.max(0, Math.min(100, 50 + cfg.mappingConstant * weightedDev));
+
+  // Q19 (2026-07-19): center on the user's OWN mean rating (matching what
+  // Insights shows as "your average"), not a fixed 50 — a fixed center meant
+  // ~half of any library scored below 50 by construction ("you won't like
+  // most things"). The center is derived, never an admin knob. Positive
+  // deviations (above-your-average items) and negative ones (below-average)
+  // get separately tunable gains (K_up / K_down) so the visible range can be
+  // skewed toward enthusiasm without an asymmetric center.
+  const center = profile.baseline * 10; // baseline is 0-10 (mean personal rating) → 0-100
+  const gain = weightedDev >= 0 ? cfg.mappingConstantUp : cfg.mappingConstantDown;
+  const rawDelta = gain * weightedDev;
+  const score = Math.max(0, Math.min(100, center + rawDelta));
+
+  // Q20 (2026-07-19): make the breakdown genuinely additive — `center + Σ
+  // reasons[].contribution` must equal `score` (within rounding), not just be
+  // "in the same ballpark". Each reason's raw points are its share of
+  // `gain·weightedDev` (i.e. `gain · dev_i · classWeight_i / totalWeight`,
+  // which is exactly what the weighted-mean formula above sums to rawDelta).
+  // When clamping caps the score (rawDelta pushed it past 0/100), scale every
+  // reason's points down by the same factor the clamp applied, so the shown
+  // parts never overstate what actually reached the visible number.
+  const clampedDelta = score - center;
+  const scale = rawDelta !== 0 ? clampedDelta / rawDelta : 0;
 
   const reasons: Reason[] = kept
     .sort((a, b) => b.dev * b.classWeight - a.dev * a.classWeight)
     .map((c) => ({
       kind: c.f.kind, role: c.f.role, label: c.f.label, category: c.f.category,
-      contribution: Math.round(c.dev * c.classWeight * 100) / 100,
+      contribution: Math.round(((gain * c.dev * c.classWeight / totalWeight) * scale) * 10) / 10,
       BA: c.BA, n: c.n,
     }));
 
-  return { score: Math.round(score * 10) / 10, reasons };
+  return { score: Math.round(score * 10) / 10, center: Math.round(center * 10) / 10, reasons };
 }
 
 // ── Filtering ──────────────────────────────────────────────────────

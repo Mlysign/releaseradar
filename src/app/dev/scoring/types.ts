@@ -3,7 +3,8 @@
 export interface ScoringConfigValues {
   roleWeights: Record<string, number>;
   priorStrength: number;
-  mappingConstant: number;
+  mappingConstantUp: number;
+  mappingConstantDown: number;
   perCategoryCap: number;
 }
 

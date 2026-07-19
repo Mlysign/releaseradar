@@ -29,6 +29,7 @@ interface DetailResponse {
   platforms?: PlatformStatus[];
   resolvedMediaItemId?: string | null;
   fandexReasons?: Reason[];
+  fandexCenter?: number | null;
   fandexColdStart?: boolean;
 }
 
@@ -218,6 +219,7 @@ export default function PersonalSection({
       {!anon && (
         <FandexScoreSection
           score={item.fandexScore ?? null}
+          center={detail?.fandexCenter ?? null}
           reasons={detail?.fandexReasons ?? []}
           coldStart={!!detail?.fandexColdStart}
         />
