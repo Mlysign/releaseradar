@@ -23,7 +23,6 @@ export default function TagAdminControls({
 }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [categories, setCategories] = useState<CategoryOpt[]>([]);
-  const [categoryId, setCategoryId] = useState(currentCategoryId ?? "");
   const [savingCategory, setSavingCategory] = useState(false);
 
   const [vocab, setVocab] = useState<VocabTag[] | null>(null);
@@ -43,12 +42,9 @@ export default function TagAdminControls({
     return () => { alive = false; };
   }, []);
 
-  useEffect(() => { setCategoryId(currentCategoryId ?? ""); }, [currentCategoryId]);
-
   if (!isAdmin) return null;
 
   async function saveCategory(id: string) {
-    setCategoryId(id);
     setSavingCategory(true);
     try {
       await fetch("/api/dev/scoring/overrides", {
@@ -105,7 +101,7 @@ export default function TagAdminControls({
       <div className="flex items-center gap-2">
         <span className="text-neutral-400 shrink-0">Category</span>
         <select
-          value={categoryId}
+          defaultValue={currentCategoryId ?? ""}
           disabled={savingCategory}
           onChange={(e) => saveCategory(e.target.value)}
           className="text-xs px-2 py-1 rounded-md bg-neutral-900 border border-neutral-700 outline-none"

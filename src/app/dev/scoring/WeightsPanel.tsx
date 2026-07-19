@@ -196,8 +196,9 @@ export default function WeightsPanel({
               </label>
               <p className="text-xs text-neutral-500">
                 Same formula, applied when an item scores below your average. Set lower than K_up to skew the visible
-                range toward enthusiasm — mismatches drop off gently instead of the score reading as "you won&apos;t
-                like this." The center itself (your own average rating, ×10) is not a knob — only these two gains are.
+                range toward enthusiasm — mismatches drop off gently instead of the score reading as &ldquo;you
+                won&apos;t like this.&rdquo; The center itself (your own average rating, ×10) is not a knob — only
+                these two gains are.
               </p>
             </div>
             <div className="space-y-1">
