@@ -52,7 +52,7 @@ const GAME_FIELDS =
   "game_type,parent_game,version_parent," + // disambiguate base game vs port/remaster/edition
   "rating,rating_count,aggregated_rating,aggregated_rating_count,total_rating,total_rating_count," +
   "cover.image_id,screenshots.image_id,artworks.image_id,videos.name,videos.video_id," +
-  "genres.name,themes.name,game_modes.name,player_perspectives.name,franchises.name,game_engines.name," +
+  "genres.name,themes.name,keywords.name,game_modes.name,player_perspectives.name,franchises.name,game_engines.name," +
   "platforms.name,release_dates.human,release_dates.date,release_dates.platform.name,release_dates.release_region," +
   "age_ratings.organization,age_ratings.rating_category,alternative_names.name," +
   "dlcs.name,expansions.name,websites.url,websites.type," +

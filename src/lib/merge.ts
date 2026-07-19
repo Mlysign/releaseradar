@@ -149,7 +149,13 @@ export function mergeLinks(mediaLinks: MediaLink[], type: MediaType, region: str
     backdropUrl,
     dates: uniqueDates,
     images: images.slice(0, 12),
-    tags: tags.slice(0, 12),
+    // 12 was fine when this was TMDB-genre-shaped (rarely more than a handful
+    // of genres+keywords); IGDB's per-game keyword lists can run into the
+    // dozens (steampunk/atmospheric/soulslike-style flavor tags plus a lot of
+    // low-value platform/rerelease noise) and were getting silently
+    // truncated before ever reaching categorizeTag(). Raised, not removed —
+    // still a display bound, not a data limit.
+    tags: tags.slice(0, 30),
     platforms: platforms.slice(0, 10),
     description,
     tagline,
@@ -276,7 +282,7 @@ export function explainMerge(mediaLinks: MediaLink[], type: MediaType): MergeFie
 
   // ── Union fields (same source lists + slices as mergeLinks) ───
   unionRow("images", IMAGE_SOURCES, dedup(unionValues(IMAGE_SOURCES, norm, "images")).slice(0, 12), (x) => x);
-  unionRow("tags", TAG_SOURCES, dedup(unionValues(TAG_SOURCES, norm, "tags")).slice(0, 12), (x) => x);
+  unionRow("tags", TAG_SOURCES, dedup(unionValues(TAG_SOURCES, norm, "tags")).slice(0, 30), (x) => x);
   unionRow("platforms", PLATFORM_SOURCES, dedup(unionValues(PLATFORM_SOURCES, norm, "platforms")).slice(0, 10), (x) => x);
   unionRow("communityRatings", RATING_SOURCES, unionValues(RATING_SOURCES, norm, "communityRatings"), (x) => x.source);
   unionRow("gameModes", GAME_MODE_SOURCES, dedup(unionValues(GAME_MODE_SOURCES, norm, "gameModes")).slice(0, 8), (x) => x);

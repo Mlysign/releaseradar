@@ -43,7 +43,13 @@ import { COUNTRIES } from "@/lib/countries";
  * fundamentally incompatible: a projected row is legitimately missing fields, so
  * a sniffer sees every row as stale and stampedes the provider APIs.
  */
-export const PROJECTION_VERSION = 1;
+// v2 (2026-07-19): IGDB's GAME_FIELDS query now requests `keywords.name` (was
+// missing entirely — steampunk/atmospheric/soulslike-style tags never reached
+// raw_data before this). projectIgdb() keeps IGDB payloads verbatim (nothing
+// to add to a keep-list here), but existing stored rows still lack the field
+// outright, so the version bump is what makes ensureGameDetail() treat them
+// as stale and refetch.
+export const PROJECTION_VERSION = 2;
 
 // The only countries `users.country` can be set to (validated by
 // normalizeCountry), so region data outside this set is unreachable by design.

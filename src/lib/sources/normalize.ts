@@ -422,7 +422,11 @@ function normalizeIgdb(d: any): SourceNormalized {
   for (const a of (d.artworks ?? []).slice(0, 3)) { const u = igdbImg(a.image_id, "t_1080p"); if (u) images.push(u); }
   out.images = images;
 
-  out.tags = [...(d.genres ?? []), ...(d.themes ?? [])].map((g: any) => g.name).filter(Boolean);
+  // Keywords (steampunk, atmospheric, soulslike, …) folded into `tags` — same
+  // bucket genres/themes already use. `merge.ts`'s dedicated `keywords` field
+  // is TMDB-only by design (movies/shows), so a game's flavor tags need to
+  // ride in `tags` to reach the "Tags & details" section at all.
+  out.tags = [...(d.genres ?? []), ...(d.themes ?? []), ...(d.keywords ?? [])].map((g: any) => g.name).filter(Boolean);
   out.platforms = (d.platforms ?? []).map((p: any) => p.name).filter(Boolean);
   out.gameModes = [
     ...(d.game_modes ?? []).map((m: any) => m.name),

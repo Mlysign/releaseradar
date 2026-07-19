@@ -169,7 +169,12 @@ const CURATED: Record<string, string> = {
 const DECADE = /^(\d{2}|\d{4})s$/;                 // 80s, 1980s
 const CENTURY = /\bcentury$/;                      // 19th century
 const BASED_ON = /^based on\b/;                    // based on novel / based on comic
-const META_RX = /(credits?stinger|post ?credits|^woman director$|cinematic universe|\bmcu\b|\bdceu\b)/;
+// IGDB's keyword taxonomy carries a lot of low-value rerelease/port/media
+// bookkeeping noise ("fan translation - french", "media type - cartridge",
+// "nes game pak - mmc1", "wii virtual console") — real for the game, but not
+// a taste signal, so it belongs in the same Meta/Noise bucket as the
+// film/TV noise below.
+const META_RX = /(credits?stinger|post ?credits|^woman director$|cinematic universe|\bmcu\b|\bdceu\b|^fan translation\b|^media( type)? -|^nes game pak\b|virtual console)/;
 const PLACE_RX = /,\s+(california|england|france|japan|texas|new york|germany|italy|spain|china|canada|australia|usa|united states)\b/;
 
 // Resolve one normalized tag key to a category id.
