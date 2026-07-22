@@ -1,5 +1,25 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { initDb, run } from "@/lib/db";
 import { personPool, sortPool, crowdAvg, PoolTitle, PublicFacetItem, PublicFacetPayload } from "./publicFacetDetail";
+
+// PR14 (2026-07-22) mocks — buildPublicFacetDetail fans out to live TMDB/RAWG
+// calls; stub the exact seams so a "tag" build resolves via the static genre
+// map (tmdbGenreId/rawgGenreSlug — no network) with one controlled result per
+// provider. persistDiscoverItems is mocked directly: it's the write path this
+// test exists to assert is (or isn't) called, not something to exercise for
+// real against the in-memory test DB.
+vi.mock("@/lib/facetDetail", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/facetDetail")>();
+  return {
+    ...actual,
+    tmdbJson: vi.fn().mockResolvedValue({ results: [{ id: 101, title: "Mock Movie", vote_average: 7, vote_count: 100 }] }),
+    rawgJson: vi.fn().mockResolvedValue({ results: [{ id: 202, name: "Mock Game", rating: 4, ratings_count: 50 }] }),
+  };
+});
+vi.mock("@/lib/discoverPersist", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/discoverPersist")>();
+  return { ...actual, persistDiscoverItems: vi.fn().mockReturnValue(new Map()) };
+});
 
 // P17 — the public facet layer does live provider calls, so these tests cover the
 // PURE logic (role-merge, sort, crowd avg) with fixtures, plus a compile-time
@@ -94,6 +114,48 @@ describe("crowdAvg", () => {
     const r = crowdAvg([mk(1, 9), mk(2, 7)]);
     expect(r.count).toBe(2);
     expect(r.avg).toBe(8);
+  });
+});
+
+describe("buildPublicFacetDetail — persist gate (PR14)", () => {
+  initDb();
+  beforeEach(() => {
+    run("DELETE FROM media_items");
+  });
+
+  it("does not write ANY media_items row when persist is false (anon/crawler)", async () => {
+    const { buildPublicFacetDetail } = await import("./publicFacetDetail");
+    const { persistDiscoverItems } = await import("@/lib/discoverPersist");
+    const payload = await buildPublicFacetDetail({ kind: "tag", key: "action" }, { persist: false });
+
+    expect(payload).not.toBeNull();
+    expect(persistDiscoverItems).not.toHaveBeenCalled();
+    // Non-linkable is the documented fallback, not an error state.
+    expect(payload!.items.every((i) => i.linkable === false)).toBe(true);
+  });
+
+  it("writes when persist is true (real session)", async () => {
+    const { buildPublicFacetDetail } = await import("./publicFacetDetail");
+    const { persistDiscoverItems } = await import("@/lib/discoverPersist");
+    await buildPublicFacetDetail({ kind: "tag", key: "action" }, { persist: true });
+
+    expect(persistDiscoverItems).toHaveBeenCalledTimes(1);
+  });
+
+  // The trap this whole gate exists to avoid: a shared cache key would let
+  // one build's persist decision leak into the other's response.
+  it("caches the anon and logged-in builds SEPARATELY, not interchangeably", async () => {
+    const { buildPublicFacetDetail } = await import("./publicFacetDetail");
+    const { persistDiscoverItems } = await import("@/lib/discoverPersist");
+    vi.mocked(persistDiscoverItems).mockClear();
+
+    await buildPublicFacetDetail({ kind: "tag", key: "romance" }, { persist: false });
+    expect(persistDiscoverItems).not.toHaveBeenCalled();
+
+    // Same kind/key/page/sort, different persist flag — must NOT hit the
+    // no-persist entry's cache slot.
+    await buildPublicFacetDetail({ kind: "tag", key: "romance" }, { persist: true });
+    expect(persistDiscoverItems).toHaveBeenCalledTimes(1);
   });
 });
 

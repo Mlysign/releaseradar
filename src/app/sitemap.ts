@@ -7,11 +7,15 @@ import { publicItemHref, PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
 //
 // listPublicItems only returns items that HAVE links, which is exactly what the
 // page can render — a linkless item 404s, and a sitemap full of 404s is worse
-// than a small sitemap.
+// than a small sitemap. As of PR13 (2026-07-22) it's also scoped to the catalog
+// POOL, not every row in media_items — see the comment on listPublicItems for
+// why that distinction is now load-bearing (a public facet page's browsed-but-
+// unowned titles are not catalog entries and must not be advertised for crawl).
 //
-// Scale: ~2,500 items today vs Google's 50,000-URL / 50 MB per-file limit, so one
-// file is fine. If the catalog ever nears that (books/anime would push it), this
-// needs splitting — `generateSitemaps` is the Next API for a sitemap index.
+// Scale: the pool is a couple thousand items vs Google's 50,000-URL / 50 MB
+// per-file limit, so one file is fine. If the catalog ever nears that
+// (books/anime would push it), this needs splitting — `generateSitemaps` is the
+// Next API for a sitemap index.
 
 // MUST be request-time. sitemap.ts is a Route Handler that Next CACHES BY
 // DEFAULT (prerendering it at build), but this one reads SQLite — and during

@@ -157,11 +157,21 @@ export async function GET(req: NextRequest) {
     // `raw` is the provider list payload used to write the row — it must be
     // STRIPPED here, not serialized to the client. It exists for persistence
     // only, and shipping it would undo a chunk of what H2a bought back.
+    //
+    // PR15 (2026-07-22): the write only happens for a real session now — same
+    // rule and same reasoning as the facet-page gate (publicFacetDetail.ts's
+    // PR14). /discover is public and infinite-scrolling, so unconditional
+    // persistence here was the OTHER half of the crawler-driven pool blowup
+    // that grew media_items to ~676k rows (see docs/archive/history.md,
+    // `prod-db-size-and-page-cache` memory note). An anon item keeps its
+    // synthetic composite id and gets `linkable: false`; PosterCard/ListCard
+    // already render that inert exactly as they do for a facet-page item that
+    // couldn't be persisted (Q14) — no new UI branch needed.
     const persist = (items: any[]) => {
-      const idMap = persistDiscoverItems(items);
+      const idMap = userId ? persistDiscoverItems(items) : new Map<string, string>();
       return items.map(({ raw, ...it }) => {
         const uuid = idMap.get(it.id);
-        return uuid ? { ...it, id: uuid } : it;
+        return uuid ? { ...it, id: uuid } : { ...it, linkable: false };
       });
     };
 

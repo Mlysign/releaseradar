@@ -3,6 +3,7 @@ import { mergeLinks } from "@/lib/merge";
 import { MediaType } from "@/types";
 import { DEFAULT_COUNTRY } from "@/lib/countries";
 import { BoundedCache } from "@/lib/boundedCache";
+import { POOL_WHERE } from "@/lib/discovery";
 import {
   PublicEnrichedItem, loadLinks, ensureTmdbDetail,
   ensureGameDetail, enrichMissingSources, applyOmdbScores,
@@ -130,11 +131,21 @@ export async function resolvePublicDetail(
 }
 
 // Every item eligible for a public page — drives sitemap.xml.
+//
+// 2026-07-22 (PR13): scoped to the POOL, same predicate discovery.ts uses for
+// Best-match/Insights. Before this, every `browsed=1` row (crawler-visited
+// facet-page titles) was in here too — the pool grew to ~676k rows against a
+// library of under 2,000, and the resulting sitemap was ~135 MB / 13.5x
+// Google's 50,000-URL cap, almost certainly rejected outright. A browsed item
+// still has a working page (it 404s only if it truly has no links) — it's just
+// not advertised for crawling, matching what recommendIngest already treats as
+// "not a catalog entry" everywhere else.
 export function listPublicItems(): { id: string; type: MediaType; title: string; updatedAt: number | null }[] {
   return query<any>(
     `SELECT mi.id, mi.type, mi.title, MAX(ml.last_synced) AS updated_at
        FROM media_items mi
        JOIN media_links ml ON ml.media_item_id = mi.id
+      WHERE ${POOL_WHERE}
       GROUP BY mi.id
       ORDER BY mi.id`
   ).map((r: any) => ({ id: r.id, type: r.type as MediaType, title: r.title, updatedAt: r.updated_at ?? null }));

@@ -116,7 +116,10 @@ let _cache: { sig: string; aliasSig: string; at: number; vectors: DiscoveryVecto
 //
 // NOT filtered on membership alone: recommendIngest deliberately persists unowned
 // titles so the recommender has a real pool to rank, and those must stay.
-const POOL_WHERE = `(mi.browsed = 0 OR mi.id IN (SELECT media_item_id FROM user_item_state))`;
+//
+// Exported (2026-07-22, PR13) so other pool-scoped reads — the sitemap — use
+// the SAME predicate instead of re-deriving it and risking drift.
+export const POOL_WHERE = `(mi.browsed = 0 OR mi.id IN (SELECT media_item_id FROM user_item_state))`;
 
 // The signature must be scoped to the pool too, not just the cache it guards.
 // A count over ALL of media_items would change on every /discover browse, so

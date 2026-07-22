@@ -3,6 +3,18 @@ import { initDb, run } from "@/lib/db";
 import { upsertMediaItem, upsertLibraryEntry, upsertWatchlistEntry } from "@/lib/matcher";
 import { loadPublicDetail, loadPublicItemRow, listPublicItems } from "./publicDetail";
 
+function seedBrowsedItem(id: string, title: string) {
+  run(
+    `INSERT INTO media_items (id, type, title, norm_title, browsed) VALUES (?, 'movie', ?, ?, 1)`,
+    [id, title, title.toLowerCase()]
+  );
+  run(
+    `INSERT INTO media_links (id, media_item_id, source, source_id, title, raw_data)
+     VALUES (?, ?, 'tmdb', ?, ?, '{}')`,
+    [`${id}-link`, id, id, title]
+  );
+}
+
 // P13 — the public detail path is the boundary that makes item pages shareable
 // WITHOUT publishing what the owner thinks of them. The catalog (title, poster,
 // description, community scores) is public; the user's own rating, review,
@@ -109,5 +121,25 @@ describe("listPublicItems — sitemap source", () => {
     seedRatedMovie();
     run("INSERT INTO media_items (id, type, title, norm_title) VALUES ('bare', 'movie', 'Bare', 'bare')");
     expect(listPublicItems().map((i) => i.id)).not.toContain("bare");
+  });
+
+  // PR13 (2026-07-22) — the catalog-pool blowup. Before this, a browsed=1 row
+  // (a title someone merely crawled past on a public facet page) was sitemapped
+  // exactly like a real catalog entry. At scale that's how the sitemap grew to
+  // ~135 MB / 676k URLs against a library of under 2,000.
+  it("excludes a browsed-only item even though it has links (not in the pool)", async () => {
+    seedRatedMovie();
+    seedBrowsedItem("browsed-1", "Crawled Past Me");
+
+    const ids = listPublicItems().map((i) => i.id);
+    expect(ids).not.toContain("browsed-1");
+  });
+
+  it("still includes a browsed item once a user has acted on it (promoted into the pool)", async () => {
+    seedBrowsedItem("browsed-2", "Then I Wishlisted It");
+    upsertWatchlistEntry(USER, "browsed-2", "tmdb");
+
+    const ids = listPublicItems().map((i) => i.id);
+    expect(ids).toContain("browsed-2");
   });
 });

@@ -1,11 +1,13 @@
 // P17 — the PUBLIC facet data layer, the crowd half of a facet page.
 //
 // This is to facetDetail.ts what publicDetail.ts is to enrich.ts: same subject,
-// NO per-user data. `buildPublicFacetDetail` takes only a facet ref (kind + key)
-// — never a userId — and returns `PublicFacetPayload`, which by construction has
-// no rating / library / you-vs-crowd field. A logged-in viewer's personal
-// overlay is layered on top client-side (see the facet route's island), exactly
-// like the item page.
+// NO per-user data. `buildPublicFacetDetail` takes a facet ref (kind + key) and a
+// PERSIST BOOLEAN — never a userId — and returns `PublicFacetPayload`, which by
+// construction has no rating / library / you-vs-crowd field. A logged-in
+// viewer's personal overlay is layered on top client-side (see the facet
+// route's island), exactly like the item page. The boolean, not a userId, is
+// deliberate: this module must stay unable to single out which viewer it's
+// building for, so a leak here is a compile error, not a discipline problem.
 //
 // TWO deliberate differences from facetDetail.ts's authed builder:
 //   1. The item list is PROVIDER-SOURCED, not `itemsWithFacet` (the Fandex DB).
@@ -13,9 +15,20 @@
 //      catalog / a genre's actual titles, not just what happens to be ingested.
 //      So ids resolve by NAME SEARCH against TMDB/RAWG, not by reading a catalog
 //      item that carries the facet.
-//   2. Every rendered provider title is PERSISTED thin (browsed=1) via
-//      persistDiscoverItems, so it gets a uuid and links to its item page — the
-//      same H2b path /discover uses. Titles we can't persist stay non-linkable.
+//   2. When `persist` is true, every rendered provider title is written thin
+//      (browsed=1) via persistDiscoverItems, so it gets a uuid and links to its
+//      item page — the same H2b path /discover uses. Titles we can't persist
+//      (or aren't persisting for) stay non-linkable; the page already renders
+//      that gracefully (`linkable: false`).
+//
+//      PR14 (2026-07-22): persisting used to be unconditional. Every crawler
+//      walk of a public facet page (60 titles/page) minted that many
+//      `media_items` rows, and with no cap on crawl depth the pool grew to
+//      ~676k rows against a library of under 2,000 — the root cause of the
+//      2026-07-22 memory/cost incident (see docs/archive/history.md and the
+//      `prod-db-size-and-page-cache` memory note). Callers now pass
+//      `persist: true` only for a viewer with a real session; anonymous
+//      visitors and crawlers get the same payload shape with no new writes.
 
 import { MediaType } from "@/types";
 import { FacetKind, personKey } from "@/lib/facets";
@@ -404,17 +417,26 @@ export interface PublicFacetRef { kind: FacetKind; key: string; label?: string |
 // it across viewers can't leak anything; the personal overlay is client-side.
 // scoringConfigSignature is folded into the key so an admin edit (tag category,
 // bundle — Q18) shows up on the public page immediately instead of after TTL.
+//
+// PR14: `persist` MUST be part of this key too. It changes which items are
+// `linkable` in the payload, so without it the first build after a deploy
+// picks a winner at random — an anon-built (all non-linkable) payload can get
+// cached and served back to a logged-in viewer, or vice versa, until the TTL
+// clears. Same shape of bug the scoringConfigSignature line above already
+// guards against, just for a different input.
 const _facetPageCache = new BoundedCache<string, PublicFacetPayload>({ max: 500, ttlMs: 60 * 60 * 1000 });
 
-// Build the public payload for one facet page. Provider-sourced, persisted thin
-// for linkability, no user data. Returns null only when the kind is unknown.
+// Build the public payload for one facet page. Provider-sourced; persisted
+// thin for linkability ONLY when `persist` is true (PR14 — see the module
+// header). Returns null only when the kind is unknown.
 export async function buildPublicFacetDetail(
   ref: PublicFacetRef,
-  opts: { page?: number; sort?: FacetSort } = {}
+  opts: { page?: number; sort?: FacetSort; persist?: boolean } = {}
 ): Promise<PublicFacetPayload | null> {
   const page = Math.max(0, opts.page ?? 0);
   const sort = opts.sort ?? "popular";
-  const cacheKey = `${ref.kind}:${ref.key}:${page}:${sort}:${scoringConfigSignature()}`;
+  const persist = opts.persist ?? false;
+  const cacheKey = `${ref.kind}:${ref.key}:${page}:${sort}:${persist ? "persist" : "nopersist"}:${scoringConfigSignature()}`;
   const cachedPayload = _facetPageCache.get(cacheKey);
   if (cachedPayload) return cachedPayload;
   const key = ref.key;
@@ -465,17 +487,26 @@ export async function buildPublicFacetDetail(
   const sorted = sortPool(pool, sort);
   const community = crowdAvg(sorted);
 
-  // Persist the page's slice thin so each title links to its item page.
+  // Persist the page's slice thin so each title links to its item page — but
+  // ONLY for a real session (PR14). An anon/crawler build skips the write
+  // entirely; `uuidByKey` stays empty, and every item below falls back to its
+  // existing `linkable: false` rendering. No lookup-only fallback for items
+  // some OTHER logged-in viewer already persisted, on purpose: keeping this
+  // branch a flat "write or don't" is what makes it easy to verify zero writes
+  // happen for an anonymous build (see publicFacetDetail.test.ts).
   const start = page * FACET_PAGE_SIZE;
   const slice = sorted.slice(start, start + FACET_PAGE_SIZE);
-  const persistable: PersistableItem[] = slice
-    .filter((t) => t.raw && t.title)
-    .map((t) => ({
-      id: `${t.source}:${t.sourceId}`,
-      type: t.type, title: t.title, releaseDate: t.releaseDate,
-      raw: { source: t.source as any, sourceId: t.sourceId, data: t.raw },
-    }));
-  const uuidByKey = persistDiscoverItems(persistable);
+  let uuidByKey = new Map<string, string>();
+  if (persist) {
+    const persistable: PersistableItem[] = slice
+      .filter((t) => t.raw && t.title)
+      .map((t) => ({
+        id: `${t.source}:${t.sourceId}`,
+        type: t.type, title: t.title, releaseDate: t.releaseDate,
+        raw: { source: t.source as any, sourceId: t.sourceId, data: t.raw },
+      }));
+    uuidByKey = persistDiscoverItems(persistable);
+  }
 
   const items: PublicFacetItem[] = slice.map((t) => {
     const uuid = uuidByKey.get(`${t.source}:${t.sourceId}`);

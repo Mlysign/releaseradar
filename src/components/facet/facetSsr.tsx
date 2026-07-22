@@ -6,6 +6,7 @@ import { PUBLIC_ITEMS_INDEXABLE } from "@/lib/publicUrl";
 import { isFacetPrefix, prefixToKind, slugToKey, publicFacetHref, FacetPrefix } from "@/lib/facetUrl";
 import { canonicalTagKey } from "@/lib/tagAlias";
 import { buildPublicFacetDetail, isFacetSort, FacetSort, PublicFacetPayload } from "@/lib/detail/publicFacetDetail";
+import { getSession } from "@/lib/session";
 import PublicFacetView from "@/components/facet/PublicFacetView";
 
 // P17 — shared SSR for the three public facet routes (/person, /tag, /studio).
@@ -15,7 +16,9 @@ const ROLE_LABEL: Record<FacetPrefix, string> = { person: "Person", tag: "Tag", 
 
 // cache() dedupes the provider build across generateMetadata + the render (both
 // need the payload). Keyed by (prefix, slug, sort) so metadata and body — which
-// pass the SAME sort from searchParams — resolve to one build per request.
+// pass the SAME sort from searchParams — resolve to one build per request. The
+// session doesn't need to be in this key: it can't change mid-request, so both
+// callers see the same persist decision regardless of which one runs first.
 const resolve = cache(async (prefix: string, slug: string, sort: FacetSort): Promise<PublicFacetPayload | null> => {
   if (!isFacetPrefix(prefix)) return null;
   let key = slugToKey(slug);
@@ -23,7 +26,11 @@ const resolve = cache(async (prefix: string, slug: string, sort: FacetSort): Pro
   // H5.6: a tag bundle's member spellings resolve to the canonical key, so the
   // provider pool + metadata use the canonical (the body separately 308s the URL).
   if (prefix === "tag") key = canonicalTagKey(key);
-  return buildPublicFacetDetail({ kind: prefixToKind(prefix), key }, { page: 0, sort });
+  // PR14: only a real session earns a write. cookies() is readable (though not
+  // writable) from a Server Component, so this is safe to call from metadata
+  // generation too — see @/lib/session.
+  const session = await getSession();
+  return buildPublicFacetDetail({ kind: prefixToKind(prefix), key }, { page: 0, sort, persist: !!session });
 });
 
 function sortOf(sp: Record<string, string | string[] | undefined> | undefined): FacetSort {
